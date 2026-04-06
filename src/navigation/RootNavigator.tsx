@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
@@ -17,11 +16,7 @@ export default function RootNavigator() {
     );
   }
 
-  return (
-    <NavigationContainer>
-      {state.user ? <MainTabs /> : <AuthStack />}
-    </NavigationContainer>
-  );
+  return state.user ? <MainTabs /> : <AuthStack />;
 }
 
 const styles = StyleSheet.create({
