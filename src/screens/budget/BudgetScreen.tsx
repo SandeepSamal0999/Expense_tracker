@@ -10,15 +10,16 @@ import {
   Alert,
 } from 'react-native';
 import { useApp } from '../../context/AppContext';
-import { COLORS, CATEGORY_META, ALL_CATEGORIES } from '../../constants/colors';
-import { Budget, Category } from '../../types';
+import { COLORS } from '../../constants/colors';
+import { getCategoryMeta } from '../../services/categoryService';
+import { Budget } from '../../types';
 import EmptyState from '../../components/EmptyState';
 
 export default function BudgetScreen() {
   const { state, addBudget, deleteBudget } = useApp();
-  const { expenses, budgets } = state;
+  const { expenses, budgets, categories } = state;
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<Category>('Food');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Food');
   const [limitInput, setLimitInput] = useState('');
 
   const now = new Date();
@@ -30,7 +31,7 @@ export default function BudgetScreen() {
   }, [expenses, currentMonth]);
 
   const spentByCategory = useMemo(() => {
-    const map: Partial<Record<Category, number>> = {};
+    const map: Record<string, number> = {};
     monthExpenses.forEach(e => {
       map[e.category] = (map[e.category] || 0) + e.amount;
     });
@@ -137,7 +138,7 @@ export default function BudgetScreen() {
 
           {currentBudgets.length > 0 ? (
             currentBudgets.map(budget => {
-              const meta = CATEGORY_META[budget.category];
+              const meta = getCategoryMeta(categories, budget.category);
               const spent = spentByCategory[budget.category] || 0;
               const pct = Math.min((spent / budget.limit) * 100, 100);
               const statusColor = getStatusColor(spent, budget.limit);
@@ -213,19 +214,18 @@ export default function BudgetScreen() {
 
             <Text style={styles.modalLabel}>Category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catPicker}>
-              {ALL_CATEGORIES.map(cat => {
-                const meta = CATEGORY_META[cat];
-                const isSelected = cat === selectedCategory;
+              {categories.map(cat => {
+                const isSelected = cat.name === selectedCategory;
                 return (
                   <TouchableOpacity
-                    key={cat}
+                    key={cat.name}
                     style={[
                       styles.catChip,
-                      isSelected && { borderColor: meta.color, backgroundColor: meta.color + '15' },
+                      isSelected && { borderColor: cat.color, backgroundColor: cat.color + '15' },
                     ]}
-                    onPress={() => setSelectedCategory(cat)}>
+                    onPress={() => setSelectedCategory(cat.name)}>
                     <Text style={styles.catChipText}>
-                      {meta.emoji} {cat}
+                      {cat.emoji} {cat.name}
                     </Text>
                   </TouchableOpacity>
                 );

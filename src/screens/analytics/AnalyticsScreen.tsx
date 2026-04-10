@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useApp } from '../../context/AppContext';
-import { COLORS, CATEGORY_META } from '../../constants/colors';
-import { Category, Transaction } from '../../types';
+import { COLORS } from '../../constants/colors';
+import { getCategoryMeta } from '../../services/categoryService';
+import { Transaction } from '../../types';
 import BarChart from '../../components/BarChart';
 import EmptyState from '../../components/EmptyState';
 
@@ -10,7 +11,7 @@ type Period = 'week' | 'month';
 
 export default function AnalyticsScreen() {
   const { state } = useApp();
-  const { expenses } = state;
+  const { expenses, categories } = state;
   const [period, setPeriod] = useState<Period>('week');
 
   const now = new Date();
@@ -110,7 +111,7 @@ export default function AnalyticsScreen() {
 
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Category Breakdown</Text>
         {categoryTotals.map(([cat, amount]) => {
-          const meta = CATEGORY_META[cat as Category];
+          const meta = getCategoryMeta(categories, cat);
           const pct = totalSpent > 0 ? (amount / totalSpent) * 100 : 0;
           return (
             <View key={cat} style={styles.catRow}>
@@ -132,7 +133,7 @@ export default function AnalyticsScreen() {
 
         <View style={styles.progressSection}>
           {categoryTotals.map(([cat, amount]) => {
-            const meta = CATEGORY_META[cat as Category];
+            const meta = getCategoryMeta(categories, cat);
             const pct = totalSpent > 0 ? (amount / totalSpent) * 100 : 0;
             return (
               <View key={cat} style={styles.progressRow}>

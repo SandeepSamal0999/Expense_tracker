@@ -1,0 +1,16 @@
+package com.expensetrackerfrontend.sms
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class SmsPackage : ReactPackage {
+    @Suppress("DEPRECATION")
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+        listOf(SmsModule(reactContext))
+
+    @Suppress("DEPRECATION")
+    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+        emptyList()
+}

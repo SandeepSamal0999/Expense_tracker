@@ -1,15 +1,15 @@
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useApp } from '../../context/AppContext';
-import { COLORS, CATEGORY_META } from '../../constants/colors';
-import { Category } from '../../types';
+import { COLORS } from '../../constants/colors';
+import { getCategoryMeta } from '../../services/categoryService';
 import MetricCard from '../../components/MetricCard';
 import TransactionRow from '../../components/TransactionRow';
 import EmptyState from '../../components/EmptyState';
 
 export default function DashboardScreen({ navigation }: any) {
   const { state } = useApp();
-  const { expenses, user } = state;
+  const { expenses, user, categories } = state;
 
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -22,7 +22,7 @@ export default function DashboardScreen({ navigation }: any) {
     const totalMonth = monthExpenses.reduce((s, e) => s + e.amount, 0);
     const totalToday = todayExpenses.reduce((s, e) => s + e.amount, 0);
 
-    const categoryTotals: Partial<Record<Category, number>> = {};
+    const categoryTotals: Record<string, number> = {};
     monthExpenses.forEach(e => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     });
@@ -82,7 +82,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.sectionTitle}>Top Spending</Text>
               <View style={styles.categoriesRow}>
                 {topCategories.map(([cat, amount]) => {
-                  const meta = CATEGORY_META[cat as Category];
+                  const meta = getCategoryMeta(categories, cat);
                   const pct = stats.totalMonth > 0 ? ((amount ?? 0) / stats.totalMonth) * 100 : 0;
                   return (
                     <View key={cat} style={styles.catCard}>

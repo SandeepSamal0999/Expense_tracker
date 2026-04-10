@@ -1,31 +1,32 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Category } from '../types';
-import { COLORS, CATEGORY_META, ALL_CATEGORIES } from '../constants/colors';
+import { COLORS } from '../constants/colors';
+import { useApp } from '../context/AppContext';
 
 interface Props {
-  selected: Category;
-  onSelect: (category: Category) => void;
+  selected: string;
+  onSelect: (category: string) => void;
 }
 
 export default function CategoryPicker({ selected, onSelect }: Props) {
+  const { state } = useApp();
+
   return (
     <View style={styles.grid}>
-      {ALL_CATEGORIES.map(cat => {
-        const meta = CATEGORY_META[cat];
-        const isSelected = cat === selected;
+      {state.categories.map(cat => {
+        const isSelected = cat.name === selected;
         return (
           <TouchableOpacity
-            key={cat}
+            key={cat.name}
             style={[
               styles.item,
-              isSelected && { borderColor: meta.color, backgroundColor: meta.color + '15' },
+              isSelected && { borderColor: cat.color, backgroundColor: cat.color + '15' },
             ]}
-            onPress={() => onSelect(cat)}
+            onPress={() => onSelect(cat.name)}
             activeOpacity={0.7}>
-            <Text style={styles.emoji}>{meta.emoji}</Text>
-            <Text style={[styles.label, isSelected && { color: meta.color }]}>
-              {meta.label}
+            <Text style={styles.emoji}>{cat.emoji}</Text>
+            <Text style={[styles.label, isSelected && { color: cat.color }]}>
+              {cat.name}
             </Text>
           </TouchableOpacity>
         );

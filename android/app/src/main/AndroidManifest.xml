@@ -1,16 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
       android:icon="@mipmap/ic_launcher"
       android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
+      android:allowBackup="true"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -23,5 +26,26 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <!-- Real-time SMS receiver -->
+      <receiver
+        android:name=".sms.SmsReceiver"
+        android:exported="true">
+        <intent-filter android:priority="999">
+            <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+        </intent-filter>
+      </receiver>
+
+      <!-- Notification listener service for UPI apps -->
+      <service
+        android:name=".notification.ExpenseNotificationService"
+        android:label="Expense Auto Capture"
+        android:exported="true"
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <intent-filter>
+            <action android:name="android.service.notification.NotificationListenerService" />
+        </intent-filter>
+      </service>
+
     </application>
 </manifest>

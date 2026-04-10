@@ -1,6 +1,8 @@
 package com.expensetrackerfrontend
 
 import android.app.Application
+import com.expensetrackerfrontend.notification.NotificationPackage
+import com.expensetrackerfrontend.sms.SmsPackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -14,8 +16,8 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Packages that cannot be autolinked yet can be added manually here, for example:
-          // add(MyReactNativePackage())
+          add(SmsPackage())
+          add(NotificationPackage())
         },
     )
   }

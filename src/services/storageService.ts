@@ -5,7 +5,36 @@ const KEYS = {
   USER: '@expense_tracker_user',
   EXPENSES: '@expense_tracker_expenses',
   BUDGETS: '@expense_tracker_budgets',
+  TOKEN: '@expense_tracker_token',
+  SETTINGS: '@expense_tracker_settings',
 };
+
+export interface AppSettings {
+  smsEnabled: boolean;
+  notifEnabled: boolean;
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  const data = await AsyncStorage.getItem(KEYS.SETTINGS);
+  return data ? JSON.parse(data) : { smsEnabled: false, notifEnabled: false };
+}
+
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+}
+
+// Token
+export async function getToken(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.TOKEN);
+}
+
+export async function saveToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.TOKEN, token);
+}
+
+export async function clearToken(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.TOKEN);
+}
 
 // User
 export async function getUser(): Promise<User | null> {
@@ -19,6 +48,7 @@ export async function saveUser(user: User): Promise<void> {
 
 export async function clearUser(): Promise<void> {
   await AsyncStorage.removeItem(KEYS.USER);
+  await AsyncStorage.removeItem(KEYS.TOKEN);
 }
 
 // Expenses

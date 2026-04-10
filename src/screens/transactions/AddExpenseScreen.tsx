@@ -45,7 +45,13 @@ export default function AddExpenseScreen({ route, navigation }: any) {
       merchant: merchant.trim(),
       amount: amountNum,
       category,
-      date: new Date(date).toISOString(),
+      date: (() => {
+        const today = new Date().toISOString().split('T')[0];
+        if (date === today) return new Date().toISOString(); // exact current time
+        // Past date — parse as local noon to avoid UTC offset shifting the day
+        const [y, m, d] = date.split('-').map(Number);
+        return new Date(y, m - 1, d, 12, 0, 0).toISOString();
+      })(),
       notes: notes.trim(),
       source: existing?.source || 'Manual',
       method: existing?.method || 'Manual',

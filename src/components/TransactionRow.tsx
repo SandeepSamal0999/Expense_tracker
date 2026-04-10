@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Transaction } from '../types';
-import { COLORS, CATEGORY_META } from '../constants/colors';
+import { COLORS } from '../constants/colors';
+import { useApp } from '../context/AppContext';
+import { getCategoryMeta } from '../services/categoryService';
 
 interface Props {
   transaction: Transaction;
@@ -9,7 +11,8 @@ interface Props {
 }
 
 export default function TransactionRow({ transaction, onPress }: Props) {
-  const meta = CATEGORY_META[transaction.category];
+  const { state } = useApp();
+  const meta = getCategoryMeta(state.categories, transaction.category);
   const date = new Date(transaction.date);
   const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 

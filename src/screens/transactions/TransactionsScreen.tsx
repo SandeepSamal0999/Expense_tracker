@@ -8,8 +8,9 @@ import {
   SectionList,
 } from 'react-native';
 import { useApp } from '../../context/AppContext';
-import { COLORS, ALL_CATEGORIES, CATEGORY_META } from '../../constants/colors';
-import { Category, Transaction } from '../../types';
+import { COLORS } from '../../constants/colors';
+import { getCategoryMeta } from '../../services/categoryService';
+import { Transaction } from '../../types';
 import TransactionRow from '../../components/TransactionRow';
 import SearchBar from '../../components/SearchBar';
 import EmptyState from '../../components/EmptyState';
@@ -18,11 +19,11 @@ type TimeFilter = 'all' | 'today' | 'week' | 'month';
 
 export default function TransactionsScreen({ navigation }: any) {
   const { state } = useApp();
-  const { expenses } = state;
+  const { expenses, categories } = state;
 
   const [search, setSearch] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
-  const [categoryFilter, setCategoryFilter] = useState<Category | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const now = new Date();
@@ -128,25 +129,25 @@ export default function TransactionsScreen({ navigation }: any) {
             </TouchableOpacity>
           ))}
           <View style={styles.chipDivider} />
-          {ALL_CATEGORIES.map(cat => (
+          {categories.map(cat => (
             <TouchableOpacity
-              key={cat}
+              key={cat.name}
               style={[
                 styles.chip,
-                categoryFilter === cat && {
-                  backgroundColor: CATEGORY_META[cat].color + '20',
-                  borderColor: CATEGORY_META[cat].color,
+                categoryFilter === cat.name && {
+                  backgroundColor: cat.color + '20',
+                  borderColor: cat.color,
                 },
               ]}
               onPress={() =>
-                setCategoryFilter(categoryFilter === cat ? null : cat)
+                setCategoryFilter(categoryFilter === cat.name ? null : cat.name)
               }>
               <Text
                 style={[
                   styles.chipText,
-                  categoryFilter === cat && { color: CATEGORY_META[cat].color },
+                  categoryFilter === cat.name && { color: cat.color },
                 ]}>
-                {CATEGORY_META[cat].emoji} {cat}
+                {cat.emoji} {cat.name}
               </Text>
             </TouchableOpacity>
           ))}

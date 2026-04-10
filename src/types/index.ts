@@ -1,11 +1,4 @@
-export type Category =
-  | 'Food'
-  | 'Transport'
-  | 'Shopping'
-  | 'Entertainment'
-  | 'Health'
-  | 'Bills'
-  | 'Other';
+export type Category = string;
 
 export type PaymentMethod = 'UPI' | 'SMS' | 'Notification' | 'Manual';
 export type ExpenseSource = 'SMS' | 'Notification' | 'Manual';
@@ -36,9 +29,10 @@ export interface User {
 }
 
 export interface CategoryMeta {
-  color: string;
+  name: string;
   emoji: string;
-  label: string;
+  color: string;
+  isDefault: boolean;
 }
 
 export type RootStackParamList = {
