@@ -3,7 +3,9 @@ package com.expensetrackerfrontend.sms
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Telephony
+import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.ReactApplication
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import org.json.JSONArray
@@ -42,10 +44,24 @@ class SmsReceiver : BroadcastReceiver() {
     private fun notifyJs(context: Context) {
         try {
             val reactContext = (context.applicationContext as? ReactApplication)
-                ?.reactHost?.currentReactContext ?: return
-            reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit("onSmsPending", null)
+                ?.reactHost?.currentReactContext
+
+            if (reactContext != null) {
+                // App is running — emit event directly so the JS layer drains immediately
+                reactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    .emit("onSmsPending", null)
+            } else {
+                // App is not running — launch a headless JS task so the SMS is parsed and
+                // saved to AsyncStorage right now, without requiring the user to open the app.
+                HeadlessJsTaskService.acquireWakeLockNow(context)
+                val serviceIntent = Intent(context, SmsHeadlessTaskService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
+            }
         } catch (_: Exception) {}
     }
 }

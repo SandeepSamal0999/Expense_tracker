@@ -3,6 +3,7 @@ package com.expensetrackerfrontend.notification
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import com.facebook.react.bridge.*
 import org.json.JSONArray
@@ -29,6 +30,39 @@ class NotificationModule(private val reactContext: ReactApplicationContext) :
         val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         reactContext.startActivity(intent)
+    }
+
+    // Check whether the app is currently excluded from battery optimization
+    @ReactMethod
+    fun isBatteryOptimizationIgnored(promise: Promise) {
+        try {
+            val pm = reactContext.getSystemService(android.os.PowerManager::class.java)
+            promise.resolve(pm?.isIgnoringBatteryOptimizations(reactContext.packageName) ?: false)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    // Open the system dialog that lets the user exclude this app from battery optimization.
+    // This is the key fix for OEM devices (Samsung, Xiaomi, etc.) that force-stop apps
+    // when the user swipes them away from recents, preventing SmsReceiver from firing.
+    @ReactMethod
+    fun requestIgnoreBatteryOptimization() {
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${reactContext.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            reactContext.startActivity(intent)
+        } catch (_: Exception) {
+            // Fallback: open the general battery optimization settings page
+            try {
+                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(intent)
+            } catch (_: Exception) {}
+        }
     }
 
     // Get notifications received while app was closed

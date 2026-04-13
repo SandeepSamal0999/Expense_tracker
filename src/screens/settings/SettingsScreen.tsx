@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,22 +13,43 @@ import {
   PermissionsAndroid,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApp } from '../../context/AppContext';
 import { COLORS } from '../../constants/colors';
 import ManageCategoriesScreen from './ManageCategoriesScreen';
 import { exportBackup, importBackup } from '../../services/backupService';
 
-const { NotificationModule } = NativeModules;
+const { NotificationModule, DailySummaryModule } = NativeModules;
+
+const DAILY_SUMMARY_KEY = '@expense_tracker_daily_summary';
+// Daily summary fires at 9:00 PM by default
+const SUMMARY_HOUR = 21;
+const SUMMARY_MINUTE = 0;
 
 export default function SettingsScreen() {
   const { state, logout, updateSettings } = useApp();
   const { user, settings } = state;
   const { smsEnabled, notifEnabled } = settings;
 
-  const [dailySummary, setDailySummary] = useState(true);
+  const [dailySummary, setDailySummary] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [importModal, setImportModal] = useState(false);
   const [importText, setImportText] = useState('');
+  const [batteryOptIgnored, setBatteryOptIgnored] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !NotificationModule) return;
+    NotificationModule.isBatteryOptimizationIgnored()
+      .then((ignored: boolean) => setBatteryOptIgnored(ignored))
+      .catch(() => {});
+  }, []);
+
+  // Load saved daily summary preference
+  useEffect(() => {
+    AsyncStorage.getItem(DAILY_SUMMARY_KEY)
+      .then(val => setDailySummary(val === 'true'))
+      .catch(() => {});
+  }, []);
 
   const handleSmsToggle = async (val: boolean) => {
     if (!val) {
@@ -74,6 +95,71 @@ export default function SettingsScreen() {
           },
         ],
       );
+    }
+  };
+
+  const handleBatteryOptimization = () => {
+    if (Platform.OS !== 'android' || !NotificationModule) return;
+    if (batteryOptIgnored) {
+      Alert.alert(
+        'Already Enabled',
+        'Background tracking is already unrestricted. Transactions will be captured even when the app is closed.',
+      );
+      return;
+    }
+    Alert.alert(
+      'Allow Background Tracking',
+      'Many Android devices (Samsung, Xiaomi, etc.) stop apps from running in the background when you swipe them away. This prevents new transactions from being captured.\n\nTap "Allow" on the next screen to fix this.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: async () => {
+            NotificationModule.requestIgnoreBatteryOptimization();
+            // Re-check status after a short delay so the toggle reflects any change
+            setTimeout(async () => {
+              try {
+                const ignored = await NotificationModule.isBatteryOptimizationIgnored();
+                setBatteryOptIgnored(ignored);
+              } catch (_) {}
+            }, 2000);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDailySummaryToggle = async (val: boolean) => {
+    if (Platform.OS !== 'android' || !DailySummaryModule) {
+      setDailySummary(val);
+      return;
+    }
+
+    if (val) {
+      // Request POST_NOTIFICATIONS permission on Android 13+
+      if (Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS as any,
+        );
+        if (granted !== 'granted') {
+          Alert.alert(
+            'Permission Required',
+            'Allow notifications to receive the daily spending summary.',
+          );
+          return;
+        }
+      }
+      DailySummaryModule.scheduleDailySummary(SUMMARY_HOUR, SUMMARY_MINUTE);
+      await AsyncStorage.setItem(DAILY_SUMMARY_KEY, 'true');
+      setDailySummary(true);
+      Alert.alert(
+        'Daily Summary Enabled',
+        `You will receive a spending summary notification every day at ${SUMMARY_HOUR}:${String(SUMMARY_MINUTE).padStart(2, '0')} PM.`,
+      );
+    } else {
+      DailySummaryModule.cancelDailySummary();
+      await AsyncStorage.setItem(DAILY_SUMMARY_KEY, 'false');
+      setDailySummary(false);
     }
   };
 
@@ -141,18 +227,38 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {Platform.OS === 'android' && (
+          <TouchableOpacity style={styles.settingRow} onPress={handleBatteryOptimization}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Background Tracking</Text>
+              <Text style={styles.settingDesc}>
+                {batteryOptIgnored
+                  ? 'Unrestricted — transactions captured even when app is closed'
+                  : 'Restricted — tap to fix so transactions are captured when app is closed'}
+              </Text>
+            </View>
+            <View style={[styles.badge, batteryOptIgnored ? styles.badgeGood : styles.badgeWarn]}>
+              <Text style={[styles.badgeText, batteryOptIgnored ? styles.badgeTextGood : styles.badgeTextWarn]}>
+                {batteryOptIgnored ? 'ON' : 'FIX'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.sectionLabel}>Notifications</Text>
 
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingTitle}>Daily Summary</Text>
             <Text style={styles.settingDesc}>
-              Get a daily spending summary notification
+              {dailySummary
+                ? 'Daily summary at 9:00 PM — tap to disable'
+                : 'Get a daily spending summary notification at 9 PM'}
             </Text>
           </View>
           <Switch
             value={dailySummary}
-            onValueChange={setDailySummary}
+            onValueChange={handleDailySummaryToggle}
             trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
             thumbColor={COLORS.text}
           />
@@ -309,6 +415,17 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: COLORS.danger, fontSize: 16, fontWeight: '600' },
   version: { color: COLORS.muted, fontSize: 12, textAlign: 'center', marginTop: 20 },
+  badge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  badgeGood: { backgroundColor: '#0d2b1a', borderColor: '#22c55e' },
+  badgeWarn: { backgroundColor: '#2b1a0d', borderColor: '#f97316' },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeTextGood: { color: '#22c55e' },
+  badgeTextWarn: { color: '#f97316' },
   overlay: { flex: 1, backgroundColor: '#00000080', justifyContent: 'flex-end' },
   importModal: {
     backgroundColor: COLORS.card,

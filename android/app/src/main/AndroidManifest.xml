@@ -3,6 +3,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Required to keep the CPU awake while the headless JS task processes an SMS -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required to start a foreground service from SmsReceiver on Android 8+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required for foreground service type "dataSync" on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Allows showing the system dialog that lets users whitelist this app from battery optimization -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Required to post notifications on Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required to reschedule alarms after device reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Required to schedule exact alarms on Android 12+ -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
       android:name=".MainApplication"
@@ -35,6 +49,23 @@
             <action android:name="android.provider.Telephony.SMS_RECEIVED" />
         </intent-filter>
       </receiver>
+
+      <!-- Headless JS service: processes SMS transactions when the app is not running -->
+      <service
+        android:name=".sms.SmsHeadlessTaskService"
+        android:exported="false"
+        android:foregroundServiceType="dataSync" />
+
+      <!-- Daily summary AlarmManager receiver -->
+      <receiver
+        android:name=".summary.DailySummaryReceiver"
+        android:exported="false" />
+
+      <!-- Headless JS service: builds and posts the daily summary notification -->
+      <service
+        android:name=".summary.DailySummaryHeadlessService"
+        android:exported="false"
+        android:foregroundServiceType="dataSync" />
 
       <!-- Notification listener service for UPI apps -->
       <service

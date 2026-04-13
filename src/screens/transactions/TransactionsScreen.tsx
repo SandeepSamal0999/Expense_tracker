@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,64 @@ import {
   TouchableOpacity,
   StyleSheet,
   SectionList,
+  RefreshControl,
 } from 'react-native';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 import { COLORS } from '../../constants/colors';
-import { getCategoryMeta } from '../../services/categoryService';
 import { Transaction } from '../../types';
 import TransactionRow from '../../components/TransactionRow';
 import SearchBar from '../../components/SearchBar';
 import EmptyState from '../../components/EmptyState';
+import MonthPickerModal, { MONTH_NAMES } from '../../components/MonthPickerModal';
 
-type TimeFilter = 'all' | 'today' | 'week' | 'month';
+type Period = 'all' | 'today' | 'week' | 'month' | 'custom';
 
 export default function TransactionsScreen({ navigation }: any) {
-  const { state } = useApp();
+  const { state, addExpense, deleteExpense, refreshData } = useApp();
+  const { show } = useToast();
   const { expenses, categories } = state;
 
+  const now = new Date();
+
   const [search, setSearch] = useState('');
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
+  const [period, setPeriod] = useState<Period>('all');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [customMonth, setCustomMonth] = useState({
+    month: now.getMonth(),
+    year: now.getFullYear(),
+  });
+  const [showPicker, setShowPicker] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
+
+  const handleDelete = useCallback(
+    (tx: Transaction) => {
+      deleteExpense(tx.id);
+      show({
+        text: `${tx.merchant} deleted`,
+        subtext: `₹${tx.amount.toLocaleString('en-IN')}`,
+        onUndo: () => addExpense(tx),
+      });
+    },
+    [deleteExpense, addExpense, show],
+  );
+
+  const handleEdit = useCallback(
+    (tx: Transaction) => {
+      navigation.navigate('AddExpense', { transaction: tx });
+    },
+    [navigation],
+  );
 
   const filtered = useMemo(() => {
-    const now = new Date();
     return expenses.filter(tx => {
-      // Search filter
+      // Search
       if (search.trim()) {
         const q = search.toLowerCase();
         if (
@@ -40,36 +75,38 @@ export default function TransactionsScreen({ navigation }: any) {
         }
       }
 
-      // Category filter
-      if (categoryFilter && tx.category !== categoryFilter) {
-        return false;
-      }
+      // Category
+      if (categoryFilter && tx.category !== categoryFilter) return false;
 
-      // Time filter
-      const txDate = new Date(tx.date);
-      if (timeFilter === 'today') {
-        return txDate.toDateString() === now.toDateString();
-      }
-      if (timeFilter === 'week') {
+      // Period
+      const d = new Date(tx.date);
+      if (period === 'today') return d.toDateString() === now.toDateString();
+      if (period === 'week') {
         const weekAgo = new Date(now.getTime() - 7 * 86400000);
-        return txDate >= weekAgo;
+        return d >= weekAgo;
       }
-      if (timeFilter === 'month') {
+      if (period === 'month') {
         return (
-          txDate.getMonth() === now.getMonth() &&
-          txDate.getFullYear() === now.getFullYear()
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
         );
       }
-      return true;
+      if (period === 'custom') {
+        return (
+          d.getMonth() === customMonth.month &&
+          d.getFullYear() === customMonth.year
+        );
+      }
+      return true; // 'all'
     });
-  }, [expenses, search, timeFilter, categoryFilter]);
+  }, [expenses, search, period, categoryFilter, customMonth]);
 
   const sections = useMemo(() => {
     const groups: Record<string, Transaction[]> = {};
+    const today = new Date();
+    const yesterday = new Date(Date.now() - 86400000);
     filtered.forEach(tx => {
       const d = new Date(tx.date);
-      const today = new Date();
-      const yesterday = new Date(Date.now() - 86400000);
       let label: string;
       if (d.toDateString() === today.toDateString()) {
         label = 'Today';
@@ -90,7 +127,10 @@ export default function TransactionsScreen({ navigation }: any) {
 
   const totalFiltered = filtered.reduce((s, t) => s + t.amount, 0);
 
-  const timeFilters: { label: string; value: TimeFilter }[] = [
+  const customLabel =
+    `${MONTH_NAMES[customMonth.month]} ${customMonth.year}`;
+
+  const periodChips: { label: string; value: Period }[] = [
     { label: 'All', value: 'all' },
     { label: 'Today', value: 'today' },
     { label: 'This Week', value: 'week' },
@@ -102,7 +142,10 @@ export default function TransactionsScreen({ navigation }: any) {
       <View style={styles.header}>
         <Text style={styles.title}>Transactions</Text>
         <Text style={styles.totalLabel}>
-          Total: <Text style={styles.totalValue}>₹{totalFiltered.toLocaleString('en-IN')}</Text>
+          Total:{' '}
+          <Text style={styles.totalValue}>
+            ₹{totalFiltered.toLocaleString('en-IN')}
+          </Text>
         </Text>
       </View>
 
@@ -114,21 +157,39 @@ export default function TransactionsScreen({ navigation }: any) {
           showsHorizontalScrollIndicator={false}
           style={styles.chipsRow}
           contentContainerStyle={styles.chipsContent}>
-          {timeFilters.map(f => (
+
+          {/* Period chips */}
+          {periodChips.map(f => (
             <TouchableOpacity
               key={f.value}
-              style={[styles.chip, timeFilter === f.value && styles.chipActive]}
-              onPress={() => setTimeFilter(f.value)}>
+              style={[styles.chip, period === f.value && styles.chipActive]}
+              onPress={() => setPeriod(f.value)}>
               <Text
                 style={[
                   styles.chipText,
-                  timeFilter === f.value && styles.chipTextActive,
+                  period === f.value && styles.chipTextActive,
                 ]}>
                 {f.label}
               </Text>
             </TouchableOpacity>
           ))}
+
+          {/* Custom month chip */}
+          <TouchableOpacity
+            style={[styles.chip, period === 'custom' && styles.chipActive]}
+            onPress={() => setShowPicker(true)}>
+            <Text
+              style={[
+                styles.chipText,
+                period === 'custom' && styles.chipTextActive,
+              ]}>
+              {period === 'custom' ? customLabel : '📅 Pick Month'}
+            </Text>
+          </TouchableOpacity>
+
           <View style={styles.chipDivider} />
+
+          {/* Category chips */}
           {categories.map(cat => (
             <TouchableOpacity
               key={cat.name}
@@ -164,9 +225,9 @@ export default function TransactionsScreen({ navigation }: any) {
         renderItem={({ item }) => (
           <TransactionRow
             transaction={item}
-            onPress={tx =>
-              navigation.navigate('AddExpense', { transaction: tx })
-            }
+            onPress={tx => navigation.navigate('AddExpense', { transaction: tx })}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
           />
         )}
         ListEmptyComponent={
@@ -180,6 +241,14 @@ export default function TransactionsScreen({ navigation }: any) {
             }
           />
         }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.accent}
+            colors={[COLORS.accent]}
+          />
+        }
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
       />
@@ -190,6 +259,17 @@ export default function TransactionsScreen({ navigation }: any) {
         activeOpacity={0.8}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
+
+      <MonthPickerModal
+        visible={showPicker}
+        selectedMonth={customMonth.month}
+        selectedYear={customMonth.year}
+        onSelect={(month, year) => {
+          setCustomMonth({ month, year });
+          setPeriod('custom');
+        }}
+        onClose={() => setShowPicker(false)}
+      />
     </View>
   );
 }

@@ -3,6 +3,7 @@ package com.expensetrackerfrontend
 import android.app.Application
 import com.expensetrackerfrontend.notification.NotificationPackage
 import com.expensetrackerfrontend.sms.SmsPackage
+import com.expensetrackerfrontend.summary.DailySummaryPackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -18,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(SmsPackage())
           add(NotificationPackage())
+          add(DailySummaryPackage())
         },
     )
   }
