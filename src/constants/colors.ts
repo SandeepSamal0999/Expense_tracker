@@ -1,16 +1,16 @@
 export const COLORS = {
-  bg: '#0A0B0F',
-  card: '#13151C',
-  cardBorder: '#1E2130',
-  accent: '#00E5A0',
-  accentDim: '#00E5A020',
-  text: '#F0F2FF',
-  muted: '#5A6080',
-  danger: '#FF4D6A',
-  dangerDim: '#FF4D6A20',
-  warning: '#FFB020',
-  warningDim: '#FFB02020',
-  success: '#00E5A0',
-  successDim: '#00E5A020',
-  inputBg: '#1A1D2E',
+  bg:         '#F4F6FA',   // main background (soft light gray)
+  card:       '#FFFFFF',   // card background
+  cardBorder: '#E8EAF1',   // card border / dividers
+  accent:     '#00B37E',   // primary green (amounts, active chips, FAB)
+  accentDim:  '#00B37E1F', // ~12% opacity accent
+  text:       '#141726',   // primary text (near-black)
+  muted:      '#6B7280',   // secondary text, labels
+  danger:     '#E4374F',   // delete / error
+  dangerDim:  '#E4374F1A',
+  warning:    '#F59E0B',   // budget warning
+  warningDim: '#F59E0B1A',
+  success:    '#00B37E',   // same as accent
+  successDim: '#00B37E1A',
+  inputBg:    '#F1F3F8',   // text input background
 };

@@ -27,7 +27,7 @@ const SUMMARY_HOUR = 21;
 const SUMMARY_MINUTE = 0;
 
 export default function SettingsScreen() {
-  const { state, logout, updateSettings } = useApp();
+  const { state, logout, updateSettings, updateUser } = useApp();
   const { user, settings } = state;
   const { smsEnabled, notifEnabled } = settings;
 
@@ -36,6 +36,10 @@ export default function SettingsScreen() {
   const [importModal, setImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [batteryOptIgnored, setBatteryOptIgnored] = useState(false);
+  const [editProfileModal, setEditProfileModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !NotificationModule) return;
@@ -119,7 +123,8 @@ export default function SettingsScreen() {
             // Re-check status after a short delay so the toggle reflects any change
             setTimeout(async () => {
               try {
-                const ignored = await NotificationModule.isBatteryOptimizationIgnored();
+                const ignored =
+                  await NotificationModule.isBatteryOptimizationIgnored();
                 setBatteryOptIgnored(ignored);
               } catch (_) {}
             }, 2000);
@@ -154,7 +159,9 @@ export default function SettingsScreen() {
       setDailySummary(true);
       Alert.alert(
         'Daily Summary Enabled',
-        `You will receive a spending summary notification every day at ${SUMMARY_HOUR}:${String(SUMMARY_MINUTE).padStart(2, '0')} PM.`,
+        `You will receive a spending summary notification every day at ${SUMMARY_HOUR}:${String(
+          SUMMARY_MINUTE,
+        ).padStart(2, '0')} PM.`,
       );
     } else {
       DailySummaryModule.cancelDailySummary();
@@ -174,180 +181,299 @@ export default function SettingsScreen() {
     return <ManageCategoriesScreen onBack={() => setShowCategories(false)} />;
   }
 
+  const handleEdit = () => {
+    setEditName(user?.name || '');
+    setEditEmail(user?.email || '');
+    setEditPhone(user?.phone || '');
+    setEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    if (!editEmail.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
+    await updateUser({
+      id: user?.id || Date.now().toString(),
+      name: editName.trim(),
+      email: editEmail.trim(),
+      phone: editPhone.trim(),
+    });
+    setEditProfileModal(false);
+  };
+
   return (
     <View style={styles.container}>
-    <ScrollView showsVerticalScrollIndicator={false}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Settings</Text>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Settings</Text>
 
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(user?.name || 'U').charAt(0).toUpperCase()}
-            </Text>
+          <View style={styles.profileCard}>
+            <View style={styles.profileDetail}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(user?.name || 'U').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName} numberOfLines={1}>
+                  {user?.name || 'User'}
+                </Text>
+                <Text style={styles.profileEmail} numberOfLines={1}>
+                  {user?.email || ''}
+                </Text>
+                {user?.phone ? (
+                  <Text style={styles.profilePhone} numberOfLines={1}>
+                    {user.phone}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.action}
+              onPress={handleEdit}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionIcon}>✏️</Text>
+              <Text style={styles.actionLabel}>Edit</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{user?.name || 'User'}</Text>
-            <Text style={styles.profileEmail}>{user?.email || ''}</Text>
-            {user?.phone ? (
-              <Text style={styles.profilePhone}>{user.phone}</Text>
-            ) : null}
-          </View>
-        </View>
 
-        <Text style={styles.sectionLabel}>Auto Capture</Text>
+          <Text style={styles.sectionLabel}>Auto Capture</Text>
 
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>SMS Reading</Text>
-            <Text style={styles.settingDesc}>
-              Auto-detect expenses from bank SMS
-            </Text>
-          </View>
-          <Switch
-            value={smsEnabled}
-            onValueChange={handleSmsToggle}
-            trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
-            thumbColor={COLORS.text}
-          />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Notification Access</Text>
-            <Text style={styles.settingDesc}>
-              Read payment notifications from UPI apps
-            </Text>
-          </View>
-          <Switch
-            value={notifEnabled}
-            onValueChange={handleNotifToggle}
-            trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
-            thumbColor={COLORS.text}
-          />
-        </View>
-
-        {Platform.OS === 'android' && (
-          <TouchableOpacity style={styles.settingRow} onPress={handleBatteryOptimization}>
+          <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingTitle}>Background Tracking</Text>
+              <Text style={styles.settingTitle}>SMS Reading</Text>
               <Text style={styles.settingDesc}>
-                {batteryOptIgnored
-                  ? 'Unrestricted — transactions captured even when app is closed'
-                  : 'Restricted — tap to fix so transactions are captured when app is closed'}
+                Auto-detect expenses from bank SMS
               </Text>
             </View>
-            <View style={[styles.badge, batteryOptIgnored ? styles.badgeGood : styles.badgeWarn]}>
-              <Text style={[styles.badgeText, batteryOptIgnored ? styles.badgeTextGood : styles.badgeTextWarn]}>
-                {batteryOptIgnored ? 'ON' : 'FIX'}
+            <Switch
+              value={smsEnabled}
+              onValueChange={handleSmsToggle}
+              trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
+              thumbColor={COLORS.text}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Notification Access</Text>
+              <Text style={styles.settingDesc}>
+                Read payment notifications from UPI apps
               </Text>
             </View>
+            <Switch
+              value={notifEnabled}
+              onValueChange={handleNotifToggle}
+              trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
+              thumbColor={COLORS.text}
+            />
+          </View>
+
+          {Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={handleBatteryOptimization}
+            >
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingTitle}>Background Tracking</Text>
+                <Text style={styles.settingDesc}>
+                  {batteryOptIgnored
+                    ? 'Unrestricted — transactions captured even when app is closed'
+                    : 'Restricted — tap to fix so transactions are captured when app is closed'}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.badge,
+                  batteryOptIgnored ? styles.badgeGood : styles.badgeWarn,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.badgeText,
+                    batteryOptIgnored
+                      ? styles.badgeTextGood
+                      : styles.badgeTextWarn,
+                  ]}
+                >
+                  {batteryOptIgnored ? 'ON' : 'FIX'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <Text style={styles.sectionLabel}>Notifications</Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Daily Summary</Text>
+              <Text style={styles.settingDesc}>
+                {dailySummary
+                  ? 'Daily summary at 9:00 PM — tap to disable'
+                  : 'Get a daily spending summary notification at 9 PM'}
+              </Text>
+            </View>
+            <Switch
+              value={dailySummary}
+              onValueChange={handleDailySummaryToggle}
+              trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
+              thumbColor={COLORS.text}
+            />
+          </View>
+
+          <Text style={styles.sectionLabel}>Categories</Text>
+
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => setShowCategories(true)}
+          >
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Manage Categories</Text>
+              <Text style={styles.settingDesc}>
+                Add, edit or delete expense categories
+              </Text>
+            </View>
+            <Text style={styles.arrow}>→</Text>
           </TouchableOpacity>
-        )}
 
-        <Text style={styles.sectionLabel}>Notifications</Text>
+          <Text style={styles.sectionLabel}>Data Backup</Text>
 
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Daily Summary</Text>
-            <Text style={styles.settingDesc}>
-              {dailySummary
-                ? 'Daily summary at 9:00 PM — tap to disable'
-                : 'Get a daily spending summary notification at 9 PM'}
+          <TouchableOpacity style={styles.settingRow} onPress={exportBackup}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Export Backup</Text>
+              <Text style={styles.settingDesc}>
+                Save all data to Google Drive, WhatsApp or email
+              </Text>
+            </View>
+            <Text style={styles.arrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => {
+              setImportText('');
+              setImportModal(true);
+            }}
+          >
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>Import Backup</Text>
+              <Text style={styles.settingDesc}>
+                Restore data from a previous backup
+              </Text>
+            </View>
+            <Text style={styles.arrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.version}>Expense Tracker v1.0.0</Text>
+        </View>
+      </ScrollView>
+
+      {/* Import Backup Modal */}
+      <Modal visible={importModal} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.importModal}>
+            <Text style={styles.importTitle}>Import Backup</Text>
+            <Text style={styles.importDesc}>
+              Open your backup file, copy all the text, then paste it below.
             </Text>
-          </View>
-          <Switch
-            value={dailySummary}
-            onValueChange={handleDailySummaryToggle}
-            trackColor={{ false: COLORS.cardBorder, true: COLORS.accent }}
-            thumbColor={COLORS.text}
-          />
-        </View>
-
-        <Text style={styles.sectionLabel}>Categories</Text>
-
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => setShowCategories(true)}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Manage Categories</Text>
-            <Text style={styles.settingDesc}>Add, edit or delete expense categories</Text>
-          </View>
-          <Text style={styles.arrow}>→</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.sectionLabel}>Data Backup</Text>
-
-        <TouchableOpacity style={styles.settingRow} onPress={exportBackup}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Export Backup</Text>
-            <Text style={styles.settingDesc}>Save all data to Google Drive, WhatsApp or email</Text>
-          </View>
-          <Text style={styles.arrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.settingRow} onPress={() => { setImportText(''); setImportModal(true); }}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingTitle}>Import Backup</Text>
-            <Text style={styles.settingDesc}>Restore data from a previous backup</Text>
-          </View>
-          <Text style={styles.arrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-          activeOpacity={0.8}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.version}>Expense Tracker v1.0.0</Text>
-      </View>
-    </ScrollView>
-
-    {/* Import Backup Modal */}
-    <Modal visible={importModal} transparent animationType="slide">
-      <View style={styles.overlay}>
-        <View style={styles.importModal}>
-          <Text style={styles.importTitle}>Import Backup</Text>
-          <Text style={styles.importDesc}>
-            Open your backup file, copy all the text, then paste it below.
-          </Text>
-          <TextInput
-            style={styles.importInput}
-            value={importText}
-            onChangeText={setImportText}
-            placeholder="Paste backup JSON here..."
-            placeholderTextColor={COLORS.muted}
-            multiline
-            numberOfLines={6}
-          />
-          <View style={styles.importActions}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => setImportModal(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.saveBtn}
-              onPress={async () => {
-                if (!importText.trim()) return;
-                const result = await importBackup(importText);
-                setImportModal(false);
-                Alert.alert(
-                  result.success ? 'Restored!' : 'Failed',
-                  result.message,
-                  result.success
-                    ? [{ text: 'OK', onPress: () => logout() }]
-                    : [{ text: 'OK' }],
-                );
-              }}>
-              <Text style={styles.saveText}>Restore</Text>
-            </TouchableOpacity>
+            <TextInput
+              style={styles.importInput}
+              value={importText}
+              onChangeText={setImportText}
+              placeholder="Paste backup JSON here..."
+              placeholderTextColor={COLORS.muted}
+              multiline
+              numberOfLines={6}
+            />
+            <View style={styles.importActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setImportModal(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={async () => {
+                  if (!importText.trim()) return;
+                  const result = await importBackup(importText);
+                  setImportModal(false);
+                  Alert.alert(
+                    result.success ? 'Restored!' : 'Failed',
+                    result.message,
+                    result.success
+                      ? [{ text: 'OK', onPress: () => logout() }]
+                      : [{ text: 'OK' }],
+                  );
+                }}
+              >
+                <Text style={styles.saveText}>Restore</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={editProfileModal} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.importModal}>
+            <Text style={styles.importTitle}>Edit Profile</Text>
+            <Text style={styles.fieldLabel}>Name</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Your name"
+              placeholderTextColor={COLORS.muted}
+            />
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={editEmail}
+              onChangeText={setEditEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={COLORS.muted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <Text style={styles.fieldLabel}>Phone</Text>
+            <TextInput
+              style={styles.profileInput}
+              value={editPhone}
+              onChangeText={setEditPhone}
+              placeholder="Phone number"
+              placeholderTextColor={COLORS.muted}
+              keyboardType="phone-pad"
+            />
+            <View style={styles.importActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setEditProfileModal(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
+                <Text style={styles.saveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -355,7 +481,12 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 20, paddingBottom: 40 },
-  title: { color: COLORS.text, fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+  title: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -366,6 +497,13 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 28,
   },
+  profileDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -374,9 +512,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    flexShrink: 0,
   },
   avatarText: { color: COLORS.accent, fontSize: 24, fontWeight: 'bold' },
-  profileInfo: { flex: 1 },
+  profileInfo: { flex: 1, minWidth: 0 },
   profileName: { color: COLORS.text, fontSize: 18, fontWeight: '600' },
   profileEmail: { color: COLORS.muted, fontSize: 14, marginTop: 2 },
   profilePhone: { color: COLORS.muted, fontSize: 13, marginTop: 2 },
@@ -414,27 +553,46 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   logoutText: { color: COLORS.danger, fontSize: 16, fontWeight: '600' },
-  version: { color: COLORS.muted, fontSize: 12, textAlign: 'center', marginTop: 20 },
+  version: {
+    color: COLORS.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 20,
+  },
   badge: {
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
   },
-  badgeGood: { backgroundColor: '#0d2b1a', borderColor: '#22c55e' },
-  badgeWarn: { backgroundColor: '#2b1a0d', borderColor: '#f97316' },
+  badgeGood: { backgroundColor: COLORS.successDim, borderColor: COLORS.success },
+  badgeWarn: { backgroundColor: COLORS.warningDim, borderColor: COLORS.warning },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  badgeTextGood: { color: '#22c55e' },
-  badgeTextWarn: { color: '#f97316' },
-  overlay: { flex: 1, backgroundColor: '#00000080', justifyContent: 'flex-end' },
+  badgeTextGood: { color: COLORS.success },
+  badgeTextWarn: { color: COLORS.warning },
+  overlay: {
+    flex: 1,
+    backgroundColor: '#00000080',
+    justifyContent: 'flex-end',
+  },
   importModal: {
     backgroundColor: COLORS.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
   },
-  importTitle: { color: COLORS.text, fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
-  importDesc: { color: COLORS.muted, fontSize: 13, marginBottom: 16, lineHeight: 18 },
+  importTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  importDesc: {
+    color: COLORS.muted,
+    fontSize: 13,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
   importInput: {
     backgroundColor: COLORS.inputBg,
     borderRadius: 10,
@@ -444,6 +602,21 @@ const styles = StyleSheet.create({
     height: 140,
     textAlignVertical: 'top',
     marginBottom: 16,
+  },
+  fieldLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  profileInput: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    color: COLORS.text,
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
   },
   importActions: { flexDirection: 'row', gap: 12 },
   cancelBtn: {
@@ -463,4 +636,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveText: { color: COLORS.bg, fontSize: 15, fontWeight: '700' },
+  action: {
+    width: 72,
+    flexShrink: 0,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  actionDelete: {
+    right: 0,
+    backgroundColor: COLORS.dangerDim,
+    borderWidth: 1,
+    borderColor: COLORS.danger + '60',
+  },
+  actionIcon: {
+    fontSize: 18,
+  },
+  actionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
 });

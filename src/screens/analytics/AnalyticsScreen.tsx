@@ -12,46 +12,56 @@ import { getCategoryMeta } from '../../services/categoryService';
 import BarChart from '../../components/BarChart';
 import EmptyState from '../../components/EmptyState';
 import MonthPickerModal, { MONTH_NAMES } from '../../components/MonthPickerModal';
+import CategoryDetailModal from '../../components/CategoryDetailModal';
+import DateRangePickerModal, { DateRange } from '../../components/DateRangePickerModal';
+import {
+  istDateString,
+  istDayOfMonth,
+  istDayOfWeek,
+  istHour,
+  istMonthString,
+  istMonthStringMonthsAgo,
+} from '../../utils/dateIST';
 
-type Period = 'all' | 'today' | 'week' | 'month' | 'custom';
+type Period = 'all' | 'today' | 'week' | 'month' | 'custom' | 'range';
 
 export default function AnalyticsScreen() {
   const { state } = useApp();
   const { expenses, categories } = state;
 
   const now = new Date();
+  const [istYear, istMonthNum] = istMonthString(now).split('-').map(Number);
 
   const [period, setPeriod] = useState<Period>('month');
   const [customMonth, setCustomMonth] = useState({
-    month: now.getMonth(),
-    year: now.getFullYear(),
+    month: istMonthNum - 1,
+    year: istYear,
   });
   const [showPicker, setShowPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // ── Filtered expenses based on selected period ──────────────────────────────
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
       const d = new Date(e.date);
-      if (period === 'today') return d.toDateString() === now.toDateString();
+      if (period === 'today') return istDateString(d) === istDateString(now);
       if (period === 'week') {
         const weekAgo = new Date(now.getTime() - 7 * 86400000);
         return d >= weekAgo;
       }
-      if (period === 'month') {
-        return (
-          d.getMonth() === now.getMonth() &&
-          d.getFullYear() === now.getFullYear()
-        );
-      }
+      if (period === 'month') return istMonthString(d) === istMonthString(now);
       if (period === 'custom') {
-        return (
-          d.getMonth() === customMonth.month &&
-          d.getFullYear() === customMonth.year
-        );
+        const customMonthStr = `${customMonth.year}-${String(customMonth.month + 1).padStart(2, '0')}`;
+        return istMonthString(d) === customMonthStr;
+      }
+      if (period === 'range' && dateRange) {
+        return d >= dateRange.start && d <= dateRange.end;
       }
       return true; // 'all'
     });
-  }, [expenses, period, customMonth]);
+  }, [expenses, period, customMonth, dateRange]);
 
   const totalSpent = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
@@ -60,14 +70,10 @@ export default function AnalyticsScreen() {
     if (period === 'all') {
       // Last 6 months
       return Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-        const m = d.getMonth();
-        const y = d.getFullYear();
+        const monthStr = istMonthStringMonthsAgo(5 - i, now);
+        const m = Number(monthStr.split('-')[1]) - 1;
         const value = expenses
-          .filter(e => {
-            const ed = new Date(e.date);
-            return ed.getMonth() === m && ed.getFullYear() === y;
-          })
+          .filter(e => istMonthString(new Date(e.date)) === monthStr)
           .reduce((s, e) => s + e.amount, 0);
         return { label: MONTH_NAMES[m], value };
       });
@@ -84,7 +90,7 @@ export default function AnalyticsScreen() {
       return slots.map(({ label, start, end }) => {
         const value = filteredExpenses
           .filter(e => {
-            const h = new Date(e.date).getHours();
+            const h = istHour(e.date);
             return h >= start && h < Math.min(end, 24);
           })
           .reduce((s, e) => s + e.amount, 0);
@@ -97,23 +103,54 @@ export default function AnalyticsScreen() {
       const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const dailyTotals = new Array(7).fill(0);
       filteredExpenses.forEach(e => {
-        dailyTotals[new Date(e.date).getDay()] += e.amount;
+        dailyTotals[istDayOfWeek(e.date)] += e.amount;
       });
       return DAYS.map((label, i) => ({ label, value: dailyTotals[i] }));
+    }
+
+    if (period === 'range' && dateRange) {
+      const msPerDay = 86400000;
+      const numDays = Math.round((dateRange.end.getTime() - dateRange.start.getTime()) / msPerDay) + 1;
+      if (numDays <= 14) {
+        // Show each day
+        return Array.from({ length: numDays }, (_, i) => {
+          const d = new Date(dateRange.start.getTime() + i * msPerDay);
+          const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+          const value = filteredExpenses
+            .filter(e => new Date(e.date).toDateString() === d.toDateString())
+            .reduce((s, e) => s + e.amount, 0);
+          return { label, value };
+        });
+      }
+      // More than 14 days — group into up to 6 buckets
+      const bucketSize = Math.ceil(numDays / 6);
+      return Array.from({ length: Math.ceil(numDays / bucketSize) }, (_, i) => {
+        const bucketStart = new Date(dateRange.start.getTime() + i * bucketSize * msPerDay);
+        const bucketEnd = new Date(Math.min(
+          bucketStart.getTime() + (bucketSize - 1) * msPerDay,
+          dateRange.end.getTime(),
+        ));
+        const label = bucketStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        const value = filteredExpenses
+          .filter(e => {
+            const ed = new Date(e.date);
+            return ed >= bucketStart && ed <= new Date(bucketEnd.getFullYear(), bucketEnd.getMonth(), bucketEnd.getDate(), 23, 59, 59);
+          })
+          .reduce((s, e) => s + e.amount, 0);
+        return { label, value };
+      });
     }
 
     // 'month' or 'custom' — group by week of month
     const weeks: Record<string, number> = {};
     filteredExpenses.forEach(e => {
-      const weekNum = Math.ceil(new Date(e.date).getDate() / 7);
+      const weekNum = Math.ceil(istDayOfMonth(e.date) / 7);
       const label = `W${weekNum}`;
       weeks[label] = (weeks[label] || 0) + e.amount;
     });
     // Ensure W1–W4 always appear (even if zero) so chart isn't empty
-    const targetMonth =
-      period === 'custom' ? customMonth.month : now.getMonth();
-    const targetYear =
-      period === 'custom' ? customMonth.year : now.getFullYear();
+    const targetMonth = period === 'custom' ? customMonth.month : istMonthNum - 1;
+    const targetYear = period === 'custom' ? customMonth.year : istYear;
     const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
     const numWeeks = Math.ceil(daysInMonth / 7);
     return Array.from({ length: numWeeks }, (_, i) => {
@@ -143,6 +180,32 @@ export default function AnalyticsScreen() {
   }, [filteredExpenses]);
 
   const customLabel = `${MONTH_NAMES[customMonth.month]} ${customMonth.year}`;
+
+  const rangeDateLabel = useMemo(() => {
+    if (!dateRange) return '📅 Pick Date';
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+    const isSameDay =
+      dateRange.start.toDateString() === dateRange.end.toDateString();
+    return isSameDay ? fmt(dateRange.start) : `${fmt(dateRange.start)} – ${fmt(dateRange.end)}`;
+  }, [dateRange]);
+
+  const periodLabel =
+    period === 'today'  ? 'Today' :
+    period === 'week'   ? 'This Week' :
+    period === 'month'  ? 'This Month' :
+    period === 'custom' ? customLabel :
+    period === 'range'  ? rangeDateLabel :
+    'All Time';
+
+  const selectedCategoryMeta = selectedCategory
+    ? getCategoryMeta(categories, selectedCategory)
+    : null;
+  const selectedCategoryTxns = selectedCategory
+    ? filteredExpenses
+        .filter(e => e.category === selectedCategory)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    : [];
 
   const periodChips: { label: string; value: Period }[] = [
     { label: 'All', value: 'all' },
@@ -199,7 +262,20 @@ export default function AnalyticsScreen() {
                 styles.chipText,
                 period === 'custom' && styles.chipTextActive,
               ]}>
-              {period === 'custom' ? customLabel : '📅 Pick Month'}
+              {period === 'custom' ? customLabel : '🗓 Month'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Date / range chip */}
+          <TouchableOpacity
+            style={[styles.chip, period === 'range' && styles.chipActive]}
+            onPress={() => setShowDatePicker(true)}>
+            <Text
+              style={[
+                styles.chipText,
+                period === 'range' && styles.chipTextActive,
+              ]}>
+              {period === 'range' ? rangeDateLabel : '📅 Date'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -235,7 +311,11 @@ export default function AnalyticsScreen() {
               const meta = getCategoryMeta(categories, cat);
               const pct = totalSpent > 0 ? (amount / totalSpent) * 100 : 0;
               return (
-                <View key={cat} style={styles.catRow}>
+                <TouchableOpacity
+                  key={cat}
+                  style={styles.catRow}
+                  onPress={() => setSelectedCategory(cat)}
+                  activeOpacity={0.7}>
                   <View style={styles.catInfo}>
                     <View
                       style={[
@@ -249,10 +329,13 @@ export default function AnalyticsScreen() {
                       <Text style={styles.catPct}>{pct.toFixed(1)}%</Text>
                     </View>
                   </View>
-                  <Text style={[styles.catAmount, { color: meta.color }]}>
-                    ₹{amount.toLocaleString('en-IN')}
-                  </Text>
-                </View>
+                  <View style={styles.catRight}>
+                    <Text style={[styles.catAmount, { color: meta.color }]}>
+                      ₹{amount.toLocaleString('en-IN')}
+                    </Text>
+                    <Text style={styles.catChevron}>›</Text>
+                  </View>
+                </TouchableOpacity>
               );
             })}
 
@@ -320,6 +403,28 @@ export default function AnalyticsScreen() {
         }}
         onClose={() => setShowPicker(false)}
       />
+
+      <DateRangePickerModal
+        visible={showDatePicker}
+        value={dateRange}
+        onConfirm={range => {
+          setDateRange(range);
+          setPeriod('range');
+          setShowDatePicker(false);
+        }}
+        onClose={() => setShowDatePicker(false)}
+      />
+
+      {selectedCategory && selectedCategoryMeta && (
+        <CategoryDetailModal
+          visible={true}
+          categoryName={selectedCategory}
+          categoryMeta={selectedCategoryMeta}
+          transactions={selectedCategoryTxns}
+          periodLabel={periodLabel}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -432,9 +537,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  catRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   catAmount: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  catChevron: {
+    color: COLORS.muted,
+    fontSize: 20,
+    lineHeight: 22,
   },
   progressSection: {
     marginTop: 24,

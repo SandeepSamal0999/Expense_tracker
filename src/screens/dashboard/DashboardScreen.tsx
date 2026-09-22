@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,49 +10,117 @@ import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { COLORS } from '../../constants/colors';
 import { getCategoryMeta } from '../../services/categoryService';
-import MetricCard from '../../components/MetricCard';
 import TransactionRow from '../../components/TransactionRow';
 import EmptyState from '../../components/EmptyState';
+import DepositsModal from '../../components/DepositsModal';
+import {
+  istDateString,
+  istDateStringDaysAgo,
+  istMonthString,
+  istMonthStringMonthsAgo,
+} from '../../utils/dateIST';
+
+const QUICK_ACTIONS = [
+  { key: 'add', icon: '➕', bg: '#FDE1E6', fg: '#E4374F', label: 'Add Expense' },
+  { key: 'scan', icon: '🧾', bg: '#DCEBFF', fg: '#2563EB', label: 'Scan Bill' },
+  { key: 'budget', icon: '🎯', bg: '#DCF6E8', fg: COLORS.success, label: 'Budgets' },
+  { key: 'reports', icon: '📊', bg: '#EDE1FB', fg: '#7C3AED', label: 'Reports' },
+] as const;
 
 export default function DashboardScreen({ navigation }: any) {
   const { state, addExpense, deleteExpense } = useApp();
   const { show } = useToast();
   const { expenses, budgets, user, categories } = state;
+  const [showDeposits, setShowDeposits] = useState(false);
 
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonth = istMonthString(now);
+  const prevMonth = istMonthStringMonthsAgo(1, now);
 
   const stats = useMemo(() => {
-    const monthExpenses = expenses.filter(e => e.date.startsWith(currentMonth));
-    const todayStr = now.toDateString();
-    const todayExpenses = expenses.filter(
-      e => new Date(e.date).toDateString() === todayStr,
+    const isDebit = (e: (typeof expenses)[number]) => (e.type ?? 'debit') === 'debit';
+    const monthTxns = expenses.filter(e => istMonthString(new Date(e.date)) === currentMonth);
+    const prevMonthTxns = expenses.filter(e => istMonthString(new Date(e.date)) === prevMonth);
+    const todayStr = istDateString(now);
+    const yesterdayStr = istDateStringDaysAgo(1, now);
+
+    // Separate debits (expenses) from credits (deposits)
+    // Transactions without a type field are treated as debits (backward compat)
+    const monthDebits = monthTxns.filter(isDebit);
+    const monthCredits = monthTxns.filter(e => e.type === 'credit');
+    const prevMonthDebits = prevMonthTxns.filter(isDebit);
+
+    const todayDebits = expenses.filter(
+      e => istDateString(new Date(e.date)) === todayStr && isDebit(e),
+    );
+    const yesterdayDebits = expenses.filter(
+      e => istDateString(new Date(e.date)) === yesterdayStr && isDebit(e),
     );
 
-    const totalMonth = monthExpenses.reduce((s, e) => s + e.amount, 0);
-    const totalToday = todayExpenses.reduce((s, e) => s + e.amount, 0);
+    const totalMonth = monthDebits.reduce((s, e) => s + e.amount, 0);
+    const totalPrevMonth = prevMonthDebits.reduce((s, e) => s + e.amount, 0);
+    const totalToday = todayDebits.reduce((s, e) => s + e.amount, 0);
+    const totalYesterday = yesterdayDebits.reduce((s, e) => s + e.amount, 0);
+    const totalDeposits = monthCredits.reduce((s, e) => s + e.amount, 0);
+
+    const monthChangePct =
+      totalPrevMonth > 0 ? ((totalMonth - totalPrevMonth) / totalPrevMonth) * 100 : null;
+    const dayChangePct =
+      totalYesterday > 0 ? ((totalToday - totalYesterday) / totalYesterday) * 100 : null;
+
+    // Last 7 days of debit totals, oldest → newest, for the mini sparkline
+    const sparkline = Array.from({ length: 7 }).map((_, i) => {
+      const dayStr = istDateStringDaysAgo(6 - i, now);
+      return expenses
+        .filter(e => isDebit(e) && istDateString(new Date(e.date)) === dayStr)
+        .reduce((s, e) => s + e.amount, 0);
+    });
 
     const categoryTotals: Record<string, number> = {};
-    monthExpenses.forEach(e => {
+    monthDebits.forEach(e => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     });
 
-    return { totalMonth, totalToday, txCount: monthExpenses.length, categoryTotals };
-  }, [expenses, currentMonth]);
+    return {
+      totalMonth,
+      totalToday,
+      totalDeposits,
+      txCount: monthDebits.length,
+      depositCount: monthCredits.length,
+      depositTxns: monthCredits,
+      categoryTotals,
+      monthChangePct,
+      dayChangePct,
+      sparkline,
+    };
+  }, [expenses, currentMonth, prevMonth]);
 
-  // Budget overview for this month
-  const budgetSummary = useMemo(() => {
-    const currentBudgets = budgets.filter(b => b.month === currentMonth);
-    if (currentBudgets.length === 0) return null;
-    const totalLimit = currentBudgets.reduce((s, b) => s + b.limit, 0);
-    const totalSpent = stats.totalMonth;
-    const pct = totalLimit > 0 ? Math.min((totalSpent / totalLimit) * 100, 100) : 0;
-    const statusColor =
-      pct >= 100 ? COLORS.danger : pct >= 80 ? COLORS.warning : COLORS.success;
-    return { totalLimit, totalSpent, pct, statusColor };
-  }, [budgets, stats.totalMonth, currentMonth]);
+  const sparkMax = Math.max(...stats.sparkline, 1);
 
-  const recentTxns = expenses.slice(0, 5);
+  const insight = useMemo(() => {
+    if (stats.monthChangePct === null) return null;
+    const pct = Math.round(Math.abs(stats.monthChangePct));
+    if (stats.monthChangePct <= 0) {
+      return {
+        good: true,
+        title: "You're doing great!",
+        message: `Your spending is ${pct}% lower than last month. Keep it up!`,
+      };
+    }
+    return {
+      good: false,
+      title: 'Heads up!',
+      message: `Your spending is ${pct}% higher than last month.`,
+    };
+  }, [stats.monthChangePct]);
+
+  const recentTxns = useMemo(
+    () =>
+      [...expenses]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 5),
+    [expenses],
+  );
 
   const topCategories = useMemo(() => {
     return Object.entries(stats.categoryTotals)
@@ -79,86 +147,204 @@ export default function DashboardScreen({ navigation }: any) {
     [deleteExpense, addExpense, show],
   );
 
+  const handleQuickAction = useCallback(
+    (key: (typeof QUICK_ACTIONS)[number]['key']) => {
+      if (key === 'add') {
+        navigation.navigate('Transactions', { screen: 'AddExpense' });
+      } else if (key === 'scan') {
+        show({ text: 'Scan Bill', subtext: 'Coming soon!' });
+      } else if (key === 'budget') {
+        navigation.navigate('Budget');
+      } else if (key === 'reports') {
+        navigation.navigate('Analytics');
+      }
+    },
+    [navigation, show],
+  );
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          <Text style={styles.greeting}>
-            {greeting}, {user?.name || 'User'}
-          </Text>
-          <Text style={styles.date}>
-            {now.toLocaleDateString('en-IN', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}
-          </Text>
+          {/* Header */}
+          <View style={styles.headerCard}>
+            <View style={styles.headerDecor} pointerEvents="none">
+              <View style={styles.decorSun} />
+              <View style={styles.decorHillBack} />
+              <View style={styles.decorHillFront} />
+            </View>
 
-          <View style={styles.metricsRow}>
-            <View style={styles.metricHalf}>
-              <MetricCard
-                label="This Month"
-                value={`₹${stats.totalMonth.toLocaleString('en-IN')}`}
-                subtitle={`${stats.txCount} transactions`}
-              />
+            <View style={styles.headerTop}>
+              <View style={styles.headerTextBlock}>
+                <Text style={styles.greeting}>{greeting},</Text>
+                <Text style={styles.greetingName}>{user?.name || 'User'} 👋</Text>
+              </View>
+              <View style={styles.headerRightBlock}>
+                <Text style={styles.brandTagline}>Track{'\n'}Save{'\n'}Grow</Text>
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={styles.iconBtn}
+                    onPress={() => navigation.navigate('Settings')}
+                    activeOpacity={0.7}>
+                    <Text style={styles.iconBtnText}>🔔</Text>
+                    <View style={styles.notifDot} />
+                  </TouchableOpacity>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {(user?.name || 'U').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
-            <View style={styles.metricHalf}>
-              <MetricCard
-                label="Today"
-                value={`₹${stats.totalToday.toLocaleString('en-IN')}`}
-                accentColor={COLORS.text}
-              />
-            </View>
+            <Text style={styles.tagline}>Small steps. Big financial freedom.</Text>
           </View>
 
-          {/* Monthly budget progress — only shown if budgets are set */}
-          {budgetSummary && (
+          {/* Metric cards */}
+          <View style={styles.metricsRow}>
             <TouchableOpacity
-              style={styles.budgetCard}
-              onPress={() => navigation.navigate('Budget')}
-              activeOpacity={0.8}>
-              <View style={styles.budgetRow}>
-                <View>
-                  <Text style={styles.budgetCardLabel}>Monthly Budget</Text>
-                  <Text style={styles.budgetCardSpent}>
-                    ₹{budgetSummary.totalSpent.toLocaleString('en-IN')}{' '}
-                    <Text style={styles.budgetCardOf}>
-                      / ₹{budgetSummary.totalLimit.toLocaleString('en-IN')}
-                    </Text>
-                  </Text>
+              style={[styles.metricCard, styles.metricHalf]}
+              onPress={() => navigation.navigate('Transactions')}
+              activeOpacity={0.85}>
+              <View style={styles.metricTop}>
+                <View style={[styles.metricIcon, { backgroundColor: COLORS.successDim }]}>
+                  <Text style={styles.metricIconText}>💼</Text>
                 </View>
-                <View
-                  style={[
-                    styles.budgetPctBadge,
-                    { borderColor: budgetSummary.statusColor + '60' },
-                  ]}>
-                  <Text
+                <Text style={styles.metricChevron}>›</Text>
+              </View>
+              <Text style={styles.metricLabel}>This Month</Text>
+              <Text style={styles.metricValue}>₹{stats.totalMonth.toLocaleString('en-IN')}</Text>
+              {stats.monthChangePct !== null && (
+                <View style={styles.changeRow}>
+                  <View
                     style={[
-                      styles.budgetPctText,
-                      { color: budgetSummary.statusColor },
+                      styles.changePill,
+                      stats.monthChangePct >= 0 ? styles.pillUp : styles.pillDown,
                     ]}>
-                    {Math.round(budgetSummary.pct)}%
-                  </Text>
+                    <Text
+                      style={[
+                        styles.changePillText,
+                        stats.monthChangePct >= 0 ? styles.pillUpText : styles.pillDownText,
+                      ]}>
+                      {stats.monthChangePct >= 0 ? '↑' : '↓'}{' '}
+                      {Math.round(Math.abs(stats.monthChangePct))}%
+                    </Text>
+                  </View>
+                  <Text style={styles.changeCompare}>vs last month</Text>
                 </View>
+              )}
+              <View style={styles.sparkRow}>
+                {stats.sparkline.map((v, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.sparkBar,
+                      {
+                        height: 3 + (v / sparkMax) * 13,
+                        backgroundColor:
+                          i === stats.sparkline.length - 1
+                            ? COLORS.accent
+                            : COLORS.accent + '45',
+                      },
+                    ]}
+                  />
+                ))}
               </View>
-              <View style={styles.budgetBarBg}>
-                <View
-                  style={[
-                    styles.budgetBarFill,
-                    {
-                      width: `${budgetSummary.pct}%`,
-                      backgroundColor: budgetSummary.statusColor,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={styles.budgetCardHint}>Tap to manage budgets →</Text>
+              <Text style={styles.metricSubtitle}>{stats.txCount} transactions</Text>
             </TouchableOpacity>
-          )}
+
+            <TouchableOpacity
+              style={[styles.metricCard, styles.metricHalf]}
+              onPress={() => navigation.navigate('Transactions')}
+              activeOpacity={0.85}>
+              <View style={styles.metricTop}>
+                <View style={[styles.metricIcon, { backgroundColor: '#DCEBFF' }]}>
+                  <Text style={styles.metricIconText}>📅</Text>
+                </View>
+                <Text style={styles.metricChevron}>›</Text>
+              </View>
+              <Text style={styles.metricLabel}>Today</Text>
+              <Text style={styles.metricValue}>₹{stats.totalToday.toLocaleString('en-IN')}</Text>
+              {stats.dayChangePct !== null ? (
+                <View style={styles.changeRow}>
+                  <View
+                    style={[
+                      styles.changePill,
+                      stats.dayChangePct >= 0 ? styles.pillUp : styles.pillDown,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.changePillText,
+                        stats.dayChangePct >= 0 ? styles.pillUpText : styles.pillDownText,
+                      ]}>
+                      {stats.dayChangePct >= 0 ? '↑' : '↓'}{' '}
+                      {Math.round(Math.abs(stats.dayChangePct))}%
+                    </Text>
+                  </View>
+                  <Text style={styles.changeCompare}>vs yesterday</Text>
+                </View>
+              ) : (
+                <Text style={styles.metricSubtitle}>No spending yesterday</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Total deposits banner */}
+          <TouchableOpacity
+            style={styles.depositCard}
+            onPress={() => setShowDeposits(true)}
+            activeOpacity={0.85}>
+            <View style={styles.depositLeft}>
+              <View style={styles.depositIcon}>
+                <Text style={styles.depositIconText}>🏦</Text>
+              </View>
+              <View>
+                <Text style={styles.depositLabel}>Total Deposits</Text>
+                <Text style={styles.depositValue}>
+                  ₹{stats.totalDeposits.toLocaleString('en-IN')}
+                </Text>
+                <Text style={styles.depositHint}>
+                  {stats.depositCount > 0
+                    ? `${stats.depositCount} deposit${stats.depositCount !== 1 ? 's' : ''} this month`
+                    : 'Start your savings journey today! 🌱'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.addMoneyBtn}
+              onPress={() =>
+                navigation.navigate('Transactions', {
+                  screen: 'AddExpense',
+                  params: { presetType: 'credit' },
+                })
+              }
+              activeOpacity={0.85}>
+              <Text style={styles.addMoneyText}>Add Money →</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+
+          {/* Quick actions */}
+          <View style={styles.quickRow}>
+            {QUICK_ACTIONS.map(action => (
+              <TouchableOpacity
+                key={action.key}
+                style={styles.quickItem}
+                onPress={() => handleQuickAction(action.key)}
+                activeOpacity={0.8}>
+                <View style={[styles.quickIcon, { backgroundColor: action.bg }]}>
+                  <Text style={styles.quickIconText}>{action.icon}</Text>
+                </View>
+                <Text style={styles.quickLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {topCategories.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>Top Spending</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Top Spending</Text>
+                <Text style={styles.sectionPeriod}>This Month</Text>
+              </View>
               <View style={styles.categoriesRow}>
                 {topCategories.map(([cat, amount]) => {
                   const meta = getCategoryMeta(categories, cat);
@@ -167,11 +353,19 @@ export default function DashboardScreen({ navigation }: any) {
                       ? ((amount ?? 0) / stats.totalMonth) * 100
                       : 0;
                   return (
-                    <View key={cat} style={styles.catCard}>
+                    <View
+                      key={cat}
+                      style={[
+                        styles.catCard,
+                        {
+                          backgroundColor: meta.color + '14',
+                          borderColor: meta.color + '30',
+                        },
+                      ]}>
                       <View
                         style={[
                           styles.catIcon,
-                          { backgroundColor: meta.color + '20' },
+                          { backgroundColor: meta.color + '25' },
                         ]}>
                         <Text style={styles.catEmoji}>{meta.emoji}</Text>
                       </View>
@@ -190,11 +384,38 @@ export default function DashboardScreen({ navigation }: any) {
                           ]}
                         />
                       </View>
+                      <Text style={styles.catPct}>{Math.round(pct)}%</Text>
                     </View>
                   );
                 })}
               </View>
             </>
+          )}
+
+          {insight && (
+            <View
+              style={[
+                styles.insightCard,
+                {
+                  backgroundColor: insight.good ? COLORS.successDim : COLORS.warningDim,
+                  borderColor: insight.good ? COLORS.success + '40' : COLORS.warning + '40',
+                },
+              ]}>
+              <Text style={styles.insightIcon}>💡</Text>
+              <View style={styles.insightText}>
+                <Text style={styles.insightTitle}>{insight.title}</Text>
+                <Text style={styles.insightMessage}>{insight.message}</Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.insightBtn,
+                  { backgroundColor: insight.good ? COLORS.success : COLORS.warning },
+                ]}
+                onPress={() => navigation.navigate('Analytics')}
+                activeOpacity={0.85}>
+                <Text style={styles.insightBtnText}>View Insights →</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <View style={styles.sectionHeader}>
@@ -236,6 +457,13 @@ export default function DashboardScreen({ navigation }: any) {
         activeOpacity={0.8}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
+
+      <DepositsModal
+        visible={showDeposits}
+        transactions={stats.depositTxns}
+        periodLabel="This Month"
+        onClose={() => setShowDeposits(false)}
+      />
     </View>
   );
 }
@@ -244,44 +472,181 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { flex: 1 },
   content: { padding: 20, paddingBottom: 80 },
-  greeting: { color: COLORS.text, fontSize: 24, fontWeight: 'bold' },
-  date: { color: COLORS.muted, fontSize: 14, marginTop: 4, marginBottom: 24 },
-  metricsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  metricHalf: { flex: 1 },
-  // Budget card
-  budgetCard: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+  // Header
+  headerCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#EAF4EF',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
   },
-  budgetRow: {
+  headerDecor: { ...StyleSheet.absoluteFillObject },
+  decorSun: {
+    position: 'absolute',
+    top: -18,
+    right: 14,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFD98A',
+    opacity: 0.9,
+  },
+  decorHillBack: {
+    position: 'absolute',
+    bottom: -30,
+    left: -30,
+    width: 180,
+    height: 70,
+    borderRadius: 60,
+    backgroundColor: '#CFE7D6',
+  },
+  decorHillFront: {
+    position: 'absolute',
+    bottom: -38,
+    right: -24,
+    width: 200,
+    height: 80,
+    borderRadius: 70,
+    backgroundColor: '#BFE0C8',
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
   },
-  budgetCardLabel: { color: COLORS.muted, fontSize: 12, marginBottom: 4 },
-  budgetCardSpent: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-  budgetCardOf: { color: COLORS.muted, fontWeight: '400', fontSize: 14 },
-  budgetPctBadge: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  budgetPctText: { fontSize: 13, fontWeight: '700' },
-  budgetBarBg: {
-    height: 6,
-    backgroundColor: COLORS.cardBorder,
-    borderRadius: 3,
-    overflow: 'hidden',
+  headerTextBlock: { flexShrink: 1, paddingRight: 8, marginTop: 6 },
+  greeting: { color: COLORS.text, fontSize: 19, fontWeight: '700' },
+  greetingName: { color: COLORS.text, fontSize: 19, fontWeight: '800', marginTop: -2 },
+  tagline: { color: COLORS.muted, fontSize: 12, marginTop: 10 },
+  headerRightBlock: { alignItems: 'flex-end' },
+  brandTagline: {
+    color: COLORS.success,
+    fontSize: 11,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    textAlign: 'right',
+    lineHeight: 13,
     marginBottom: 8,
   },
-  budgetBarFill: { height: '100%', borderRadius: 3 },
-  budgetCardHint: { color: COLORS.muted, fontSize: 11, textAlign: 'right' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnText: { fontSize: 15 },
+  notifDot: {
+    position: 'absolute',
+    top: 5,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.danger,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  // Metric cards
+  metricsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
+  metricHalf: { flex: 1 },
+  metricCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 16,
+    padding: 12,
+  },
+  metricTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  metricIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricIconText: { fontSize: 14 },
+  metricChevron: { color: COLORS.muted, fontSize: 18, fontWeight: '600' },
+  metricLabel: { color: COLORS.muted, fontSize: 12, fontWeight: '500' },
+  metricValue: { color: COLORS.text, fontSize: 19, fontWeight: 'bold', marginTop: 2 },
+  changeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' },
+  changePill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  pillUp: { backgroundColor: COLORS.successDim },
+  pillDown: { backgroundColor: COLORS.dangerDim },
+  changePillText: { fontSize: 10, fontWeight: '700' },
+  pillUpText: { color: COLORS.success },
+  pillDownText: { color: COLORS.danger },
+  changeCompare: { color: COLORS.muted, fontSize: 10 },
+  sparkRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 16, marginTop: 6 },
+  sparkBar: { width: 6, borderRadius: 3 },
+  metricSubtitle: { color: COLORS.muted, fontSize: 11, marginTop: 4 },
+  // Deposit card
+  depositCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E6',
+    borderWidth: 1,
+    borderColor: '#FBBF7A50',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    gap: 10,
+  },
+  depositLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+  depositIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFE2BE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  depositIconText: { fontSize: 20 },
+  depositLabel: { color: '#B45309', fontSize: 12, fontWeight: '600' },
+  depositValue: { color: COLORS.text, fontSize: 20, fontWeight: '700', marginTop: 2 },
+  depositHint: { color: COLORS.muted, fontSize: 11, marginTop: 2 },
+  addMoneyBtn: {
+    backgroundColor: '#F97316',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  addMoneyText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  // Quick actions
+  quickRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  quickItem: { alignItems: 'center', flex: 1 },
+  quickIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  quickIconText: { fontSize: 22 },
+  quickLabel: { color: COLORS.text, fontSize: 11, fontWeight: '500', textAlign: 'center' },
   // Categories
   sectionHeader: {
     flexDirection: 'row',
@@ -295,6 +660,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
+  sectionPeriod: { color: COLORS.muted, fontSize: 13, fontWeight: '500' },
   seeAll: {
     color: COLORS.accent,
     fontSize: 13,
@@ -308,33 +674,48 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   catCard: {
-    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 14,
+    padding: 10,
     width: '47%',
     flexGrow: 1,
   },
   catIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  catEmoji: { fontSize: 18 },
-  catLabel: { color: COLORS.muted, fontSize: 12 },
-  catAmount: { fontSize: 16, fontWeight: '700', marginTop: 2 },
+  catEmoji: { fontSize: 14 },
+  catLabel: { color: COLORS.muted, fontSize: 11 },
+  catAmount: { fontSize: 15, fontWeight: '700', marginTop: 1 },
   catBarBg: {
     height: 4,
     backgroundColor: COLORS.cardBorder,
     borderRadius: 2,
-    marginTop: 8,
+    marginTop: 6,
     overflow: 'hidden',
   },
   catBar: { height: '100%', borderRadius: 2 },
+  catPct: { color: COLORS.muted, fontSize: 10, marginTop: 2 },
+  // Insight banner
+  insightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+  },
+  insightIcon: { fontSize: 22 },
+  insightText: { flex: 1 },
+  insightTitle: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  insightMessage: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  insightBtn: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  insightBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   // FAB
   fab: {
     position: 'absolute',
@@ -353,7 +734,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   fabText: {
-    color: COLORS.bg,
+    color: '#fff',
     fontSize: 28,
     fontWeight: '600',
     marginTop: -2,

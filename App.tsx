@@ -6,6 +6,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { useAutoCapture } from './src/hooks/useAutoCapture';
 import { useBudgetAlert } from './src/hooks/useBudgetAlert';
 import { Transaction } from './src/types';
+import { COLORS } from './src/constants/colors';
 
 // ─── Auto-capture runner ──────────────────────────────────────────────────────
 // Keeps SMS / notification listeners alive across all tabs.
@@ -63,7 +64,7 @@ function BudgetAlertRunner() {
 export default function App() {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A0B0F" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
       <AppProvider>
         <ToastProvider>
           <AutoCaptureRunner />
@@ -78,6 +79,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0B0F',
+    backgroundColor: COLORS.bg,
   },
 });

@@ -76,6 +76,13 @@ function isDebitTransaction(text: string): boolean {
   return DEBIT_KEYWORDS.some(k => lower.includes(k));
 }
 
+function isCreditTransaction(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (isFalsePositive(lower)) return false;
+  if (DEBIT_KEYWORDS.some(k => lower.includes(k))) return false;
+  return CREDIT_KEYWORDS.some(k => lower.includes(k));
+}
+
 // ─── Duplicate detection ──────────────────────────────────────────────────────
 // Fingerprint = sender + amount + timestamp (within same minute)
 
@@ -166,13 +173,15 @@ export interface ParsedNotification {
 export function parseSmsToTransaction(
   sms: ParsedSms,
 ): Omit<Transaction, 'id'> | null {
-  if (!isDebitTransaction(sms.body)) return null;
+  const isDebit = isDebitTransaction(sms.body);
+  const isCredit = !isDebit && isCreditTransaction(sms.body);
+  if (!isDebit && !isCredit) return null;
 
   const amount = extractAmount(sms.body);
   if (!amount || amount <= 0) return null;
 
   const merchant = extractMerchant(sms.body);
-  const category = detectCategory(merchant, sms.body);
+  const category = isCredit ? 'Income' : detectCategory(merchant, sms.body);
 
   return {
     merchant,
@@ -182,6 +191,7 @@ export function parseSmsToTransaction(
     notes: sms.address ? `Via ${sms.address}` : '',
     source: 'SMS',
     method: 'SMS',
+    type: isCredit ? 'credit' : 'debit',
   };
 }
 
@@ -190,13 +200,15 @@ export function parseNotificationToTransaction(
 ): Omit<Transaction, 'id'> | null {
   const fullText = `${notif.title} ${notif.text}`;
 
-  if (!isDebitTransaction(fullText)) return null;
+  const isDebit = isDebitTransaction(fullText);
+  const isCredit = !isDebit && isCreditTransaction(fullText);
+  if (!isDebit && !isCredit) return null;
 
   const amount = extractAmount(fullText);
   if (!amount || amount <= 0) return null;
 
   const merchant = extractMerchant(fullText);
-  const category = detectCategory(merchant, fullText);
+  const category = isCredit ? 'Income' : detectCategory(merchant, fullText);
 
   return {
     merchant,
@@ -206,5 +218,6 @@ export function parseNotificationToTransaction(
     notes: notif.title || '',
     source: 'Notification',
     method: 'UPI',
+    type: isCredit ? 'credit' : 'debit',
   };
 }

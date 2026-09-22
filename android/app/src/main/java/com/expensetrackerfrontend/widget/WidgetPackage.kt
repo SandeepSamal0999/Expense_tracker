@@ -1,13 +1,13 @@
-package com.expensetrackerfrontend.summary
+package com.expensetrackerfrontend.widget
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-class DailySummaryPackage : ReactPackage {
+class WidgetPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-        listOf(DailySummaryModule(reactContext))
+        listOf(WidgetModule(reactContext))
 
     @Suppress("OVERRIDE_DEPRECATION")
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =

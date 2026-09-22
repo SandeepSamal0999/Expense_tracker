@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ExpenseTrackerFrontend</string>
+    <string name="widget_description">Shows today\'s and this month\'s spending at a glance</string>
 </resources>

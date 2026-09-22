@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeModules } from 'react-native';
+import { istDateString } from '../utils/dateIST';
 
 const { DailySummaryModule } = NativeModules;
 
@@ -16,9 +17,9 @@ const DailySummaryTask = async () => {
     const expenses: Array<{ date: string; amount: number; merchant: string }> =
       raw ? JSON.parse(raw) : [];
 
-    const todayStr = new Date().toDateString();
+    const todayStr = istDateString();
     const todayExpenses = expenses.filter(
-      e => new Date(e.date).toDateString() === todayStr,
+      e => istDateString(new Date(e.date)) === todayStr,
     );
 
     const total = todayExpenses.reduce((s, e) => s + e.amount, 0);

@@ -11,6 +11,7 @@ import { Transaction } from '../types';
 import { COLORS } from '../constants/colors';
 import { useApp } from '../context/AppContext';
 import { getCategoryMeta } from '../services/categoryService';
+import { istRelativeDayLabel } from '../utils/dateIST';
 
 const ACTION_WIDTH = 72; // width of each swipe action button
 const SWIPE_THRESHOLD = ACTION_WIDTH * 0.5;
@@ -36,14 +37,9 @@ export default function TransactionRow({
     minute: '2-digit',
   });
 
-  const isToday = new Date().toDateString() === date.toDateString();
-  const isYesterday =
-    new Date(Date.now() - 86400000).toDateString() === date.toDateString();
-  const dateLabel = isToday
-    ? 'Today'
-    : isYesterday
-    ? 'Yesterday'
-    : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const dateLabel =
+    istRelativeDayLabel(date) ??
+    date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   // ── Swipe ──────────────────────────────────────────────────────────────────
   const translateX = useRef(new Animated.Value(0)).current;
@@ -166,7 +162,7 @@ export default function TransactionRow({
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 10,
+    marginBottom: 8,
     // Action buttons are absolutely positioned behind the sliding card
     position: 'relative',
   },
@@ -193,10 +189,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.danger + '60',
   },
   actionIcon: {
-    fontSize: 18,
+    fontSize: 16,
   },
   actionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: COLORS.muted,
   },
@@ -206,19 +202,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 12,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   emoji: {
-    fontSize: 20,
+    fontSize: 16,
   },
   details: {
     flex: 1,
@@ -226,12 +223,12 @@ const styles = StyleSheet.create({
   merchant: {
     color: COLORS.text,
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 14,
   },
   sub: {
     color: COLORS.muted,
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
   right: {
     alignItems: 'flex-end',
@@ -239,11 +236,11 @@ const styles = StyleSheet.create({
   amount: {
     color: COLORS.text,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 14,
   },
   source: {
     color: COLORS.muted,
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 9,
+    marginTop: 1,
   },
 });

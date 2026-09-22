@@ -16,6 +16,7 @@ import TransactionRow from '../../components/TransactionRow';
 import SearchBar from '../../components/SearchBar';
 import EmptyState from '../../components/EmptyState';
 import MonthPickerModal, { MONTH_NAMES } from '../../components/MonthPickerModal';
+import { istDateString, istMonthString, istRelativeDayLabel } from '../../utils/dateIST';
 
 type Period = 'all' | 'today' | 'week' | 'month' | 'custom';
 
@@ -25,13 +26,14 @@ export default function TransactionsScreen({ navigation }: any) {
   const { expenses, categories } = state;
 
   const now = new Date();
+  const [istYear, istMonthNum] = istMonthString(now).split('-').map(Number);
 
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<Period>('all');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [customMonth, setCustomMonth] = useState({
-    month: now.getMonth(),
-    year: now.getFullYear(),
+    month: istMonthNum - 1,
+    year: istYear,
   });
   const [showPicker, setShowPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,49 +82,39 @@ export default function TransactionsScreen({ navigation }: any) {
 
       // Period
       const d = new Date(tx.date);
-      if (period === 'today') return d.toDateString() === now.toDateString();
+      if (period === 'today') return istDateString(d) === istDateString(now);
       if (period === 'week') {
         const weekAgo = new Date(now.getTime() - 7 * 86400000);
         return d >= weekAgo;
       }
-      if (period === 'month') {
-        return (
-          d.getMonth() === now.getMonth() &&
-          d.getFullYear() === now.getFullYear()
-        );
-      }
+      if (period === 'month') return istMonthString(d) === istMonthString(now);
       if (period === 'custom') {
-        return (
-          d.getMonth() === customMonth.month &&
-          d.getFullYear() === customMonth.year
-        );
+        const customMonthStr = `${customMonth.year}-${String(customMonth.month + 1).padStart(2, '0')}`;
+        return istMonthString(d) === customMonthStr;
       }
       return true; // 'all'
     });
   }, [expenses, search, period, categoryFilter, customMonth]);
 
   const sections = useMemo(() => {
-    const groups: Record<string, Transaction[]> = {};
-    const today = new Date();
-    const yesterday = new Date(Date.now() - 86400000);
+    const groups: Record<string, { label: string; data: Transaction[] }> = {};
     filtered.forEach(tx => {
       const d = new Date(tx.date);
-      let label: string;
-      if (d.toDateString() === today.toDateString()) {
-        label = 'Today';
-      } else if (d.toDateString() === yesterday.toDateString()) {
-        label = 'Yesterday';
-      } else {
-        label = d.toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
-      }
-      if (!groups[label]) groups[label] = [];
-      groups[label].push(tx);
+      const dayKey = istDateString(d);
+      const label =
+        istRelativeDayLabel(d) ??
+        d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (!groups[dayKey]) groups[dayKey] = { label, data: [] };
+      groups[dayKey].data.push(tx);
     });
-    return Object.entries(groups).map(([title, data]) => ({ title, data }));
+    return Object.entries(groups)
+      .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+      .map(([, g]) => ({
+        title: g.label,
+        data: [...g.data].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+        ),
+      }));
   }, [filtered]);
 
   const totalFiltered = filtered.reduce((s, t) => s + t.amount, 0);

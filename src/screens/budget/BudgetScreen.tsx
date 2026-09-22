@@ -14,6 +14,7 @@ import { COLORS } from '../../constants/colors';
 import { getCategoryMeta } from '../../services/categoryService';
 import { Budget } from '../../types';
 import EmptyState from '../../components/EmptyState';
+import { istMonthString } from '../../utils/dateIST';
 
 export default function BudgetScreen() {
   const { state, addBudget, deleteBudget } = useApp();
@@ -23,11 +24,14 @@ export default function BudgetScreen() {
   const [limitInput, setLimitInput] = useState('');
 
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthLabel = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const currentMonth = istMonthString(now);
+  const monthLabel = new Date(`${currentMonth}-01T12:00:00`).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
 
   const monthExpenses = useMemo(() => {
-    return expenses.filter(e => e.date.startsWith(currentMonth));
+    return expenses.filter(e => istMonthString(new Date(e.date)) === currentMonth);
   }, [expenses, currentMonth]);
 
   const spentByCategory = useMemo(() => {

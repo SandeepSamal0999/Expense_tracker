@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Transaction, Budget } from '../types';
+import { istMonthString } from '../utils/dateIST';
 
 /**
  * Fires `onAlert` the first time a category's monthly budget crosses 80% or 100%
@@ -16,14 +17,13 @@ export function useBudgetAlert(
   const alertedRef = useRef(new Set<string>());
 
   useEffect(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const currentMonth = istMonthString();
     const currentBudgets = budgets.filter(b => b.month === currentMonth);
 
     const getSpentByCategory = () => {
       const map: Record<string, number> = {};
       expenses
-        .filter(e => e.date.startsWith(currentMonth))
+        .filter(e => istMonthString(new Date(e.date)) === currentMonth)
         .forEach(e => {
           map[e.category] = (map[e.category] || 0) + e.amount;
         });

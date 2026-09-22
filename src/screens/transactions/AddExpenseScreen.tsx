@@ -14,19 +14,26 @@ import { COLORS } from '../../constants/colors';
 import { Category, Transaction } from '../../types';
 import { useApp } from '../../context/AppContext';
 import CategoryPicker from '../../components/CategoryPicker';
+import { istDateString, istNoonInstant } from '../../utils/dateIST';
 
 export default function AddExpenseScreen({ route, navigation }: any) {
   const existing: Transaction | undefined = route?.params?.transaction;
   const isEdit = !!existing;
+  const presetType: 'debit' | 'credit' | undefined = route?.params?.presetType;
 
   const { addExpense, editExpense, deleteExpense } = useApp();
 
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '');
   const [merchant, setMerchant] = useState(existing?.merchant || '');
-  const [category, setCategory] = useState<Category>(existing?.category || 'Food');
+  const [category, setCategory] = useState<Category>(
+    existing?.category || (presetType === 'credit' ? 'Income' : 'Food'),
+  );
   const [notes, setNotes] = useState(existing?.notes || '');
+  const [txType, setTxType] = useState<'debit' | 'credit'>(
+    existing?.type ?? presetType ?? 'debit',
+  );
   const [date, setDate] = useState(
-    existing ? existing.date.split('T')[0] : new Date().toISOString().split('T')[0],
+    existing ? istDateString(new Date(existing.date)) : istDateString(),
   );
 
   const handleSave = async () => {
@@ -46,15 +53,15 @@ export default function AddExpenseScreen({ route, navigation }: any) {
       amount: amountNum,
       category,
       date: (() => {
-        const today = new Date().toISOString().split('T')[0];
-        if (date === today) return new Date().toISOString(); // exact current time
-        // Past date — parse as local noon to avoid UTC offset shifting the day
-        const [y, m, d] = date.split('-').map(Number);
-        return new Date(y, m - 1, d, 12, 0, 0).toISOString();
+        if (date === istDateString()) return new Date().toISOString(); // exact current time
+        // Past date — pin to IST noon so the stored instant doesn't drift
+        // to a different IST calendar day regardless of device timezone.
+        return istNoonInstant(date).toISOString();
       })(),
       notes: notes.trim(),
       source: existing?.source || 'Manual',
       method: existing?.method || 'Manual',
+      type: txType,
     };
 
     try {
@@ -106,9 +113,35 @@ export default function AddExpenseScreen({ route, navigation }: any) {
           </View>
         )}
 
+        <Text style={styles.label}>Type</Text>
+        <View style={styles.typeToggle}>
+          <TouchableOpacity
+            style={[styles.typeBtn, txType === 'debit' && styles.typeBtnDebit]}
+            onPress={() => {
+              setTxType('debit');
+              if (category === 'Income') setCategory('Food');
+            }}
+            activeOpacity={0.8}>
+            <Text style={[styles.typeBtnText, txType === 'debit' && styles.typeBtnTextActive]}>
+              ↑ Expense
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.typeBtn, txType === 'credit' && styles.typeBtnCredit]}
+            onPress={() => {
+              setTxType('credit');
+              setCategory('Income');
+            }}
+            activeOpacity={0.8}>
+            <Text style={[styles.typeBtnText, txType === 'credit' && styles.typeBtnTextActive]}>
+              ↓ Deposit
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.label}>Amount (₹)</Text>
         <TextInput
-          style={styles.amountInput}
+          style={[styles.amountInput, txType === 'credit' && { color: COLORS.accent }]}
           value={amount}
           onChangeText={setAmount}
           placeholder="0"
@@ -211,6 +244,36 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
     marginLeft: 4,
+  },
+  typeToggle: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  typeBtn: {
+    flex: 1,
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  typeBtnDebit: {
+    backgroundColor: COLORS.dangerDim,
+    borderColor: COLORS.danger,
+  },
+  typeBtnCredit: {
+    backgroundColor: COLORS.accentDim,
+    borderColor: COLORS.accent,
+  },
+  typeBtnText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  typeBtnTextActive: {
+    color: COLORS.text,
   },
   amountInput: {
     backgroundColor: COLORS.inputBg,

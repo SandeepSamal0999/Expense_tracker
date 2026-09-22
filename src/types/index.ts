@@ -12,6 +12,7 @@ export interface Transaction {
   notes: string;
   source: ExpenseSource;
   method: PaymentMethod;
+  type?: 'debit' | 'credit'; // undefined treated as 'debit' for backward compat
 }
 
 export interface Budget {

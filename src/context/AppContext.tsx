@@ -1,9 +1,19 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
+import { AppState as RNAppState, AppStateStatus } from 'react-native';
 import { Transaction, Budget, User, CategoryMeta } from '../types';
 import { AppSettings } from '../services/storageService';
 import * as api from '../services/api';
 import * as categoryService from '../services/categoryService';
 import * as storage from '../services/storageService';
+import { syncWidget } from '../services/widgetService';
 
 interface AppState {
   user: User | null;
@@ -54,6 +64,7 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, phone: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: User) => Promise<void>;
   addExpense: (expense: Transaction) => Promise<void>;
   editExpense: (expense: Transaction) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
@@ -89,6 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ]);
           dispatch({ type: 'SET_EXPENSES', payload: expenses });
           dispatch({ type: 'SET_BUDGETS', payload: budgets });
+          syncWidget(expenses);
         }
       } finally {
         dispatch({ type: 'SET_AUTH_CHECKED' });
@@ -96,14 +108,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     const [expenses, budgets] = await Promise.all([
       api.fetchExpenses(),
       api.fetchBudgets(),
     ]);
     dispatch({ type: 'SET_EXPENSES', payload: expenses });
     dispatch({ type: 'SET_BUDGETS', payload: budgets });
-  };
+    syncWidget(expenses);
+  }, []);
+
+  // Re-sync data (and the home-screen widget) whenever the app is brought
+  // back to the foreground — not just on cold start or manual pull-to-refresh —
+  // so the widget reflects transactions captured while the app was backgrounded.
+  const appState = useRef(RNAppState.currentState);
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        refreshData();
+      }
+      appState.current = nextAppState;
+    });
+    return () => subscription.remove();
+  }, [refreshData]);
 
   const contextValue: AppContextType = {
     state,
@@ -125,17 +152,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await api.logout();
       dispatch({ type: 'LOGOUT' });
     },
+    updateUser: async (user) => {
+      await storage.saveUser(user);
+      dispatch({ type: 'SET_USER', payload: user });
+    },
     addExpense: async (expense) => {
       const expenses = await api.createExpense(expense);
       dispatch({ type: 'SET_EXPENSES', payload: expenses });
+      syncWidget(expenses);
     },
     editExpense: async (expense) => {
       const expenses = await api.editExpense(expense);
       dispatch({ type: 'SET_EXPENSES', payload: expenses });
+      syncWidget(expenses);
     },
     deleteExpense: async (id) => {
       const expenses = await api.removeExpense(id);
       dispatch({ type: 'SET_EXPENSES', payload: expenses });
+      syncWidget(expenses);
     },
     addBudget: async (budget) => {
       const budgets = await api.upsertBudget(budget);

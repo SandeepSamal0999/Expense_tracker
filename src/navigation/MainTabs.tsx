@@ -22,18 +22,23 @@ export default function MainTabs() {
   const [activeTab, setActiveTab] = useState<TabId>('Dashboard');
   const [txScreen, setTxScreen] = useState<'list' | 'add'>('list');
   const [editTransaction, setEditTransaction] = useState<any>(undefined);
+  const [addExpensePreset, setAddExpensePreset] = useState<'debit' | 'credit' | undefined>(
+    undefined,
+  );
 
   const navigate = (target: string, params?: any) => {
     if (target === 'Transactions') {
       setActiveTab('Transactions');
       if (params?.screen === 'AddExpense') {
         setEditTransaction(params?.params?.transaction);
+        setAddExpensePreset(params?.params?.presetType);
         setTxScreen('add');
       } else {
         setTxScreen('list');
       }
     } else if (target === 'AddExpense') {
       setEditTransaction(params?.transaction);
+      setAddExpensePreset(params?.presetType);
       setTxScreen('add');
     } else if (target === 'TransactionsList') {
       setTxScreen('list');
@@ -46,6 +51,7 @@ export default function MainTabs() {
     if (activeTab === 'Transactions' && txScreen === 'add') {
       setTxScreen('list');
       setEditTransaction(undefined);
+      setAddExpensePreset(undefined);
     }
   };
 
@@ -60,7 +66,13 @@ export default function MainTabs() {
           return (
             <AddExpenseScreen
               navigation={{ ...navigation, goBack }}
-              route={{ params: editTransaction ? { transaction: editTransaction } : undefined }}
+              route={{
+                params: editTransaction
+                  ? { transaction: editTransaction }
+                  : addExpensePreset
+                  ? { presetType: addExpensePreset }
+                  : undefined,
+              }}
             />
           );
         }
@@ -92,6 +104,7 @@ export default function MainTabs() {
                 if (tab.id === 'Transactions') {
                   setTxScreen('list');
                   setEditTransaction(undefined);
+                  setAddExpensePreset(undefined);
                 }
               }}
               activeOpacity={0.7}>
