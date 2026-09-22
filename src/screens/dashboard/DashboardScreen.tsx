@@ -203,16 +203,18 @@ export default function DashboardScreen({ navigation }: any) {
           {/* Metric cards */}
           <View style={styles.metricsRow}>
             <TouchableOpacity
-              style={[styles.metricCard, styles.metricHalf]}
+              style={[styles.metricCard, styles.metricMonth]}
               onPress={() => navigation.navigate('Transactions')}
               activeOpacity={0.85}>
               <View style={styles.metricTop}>
-                <View style={[styles.metricIcon, { backgroundColor: COLORS.successDim }]}>
-                  <Text style={styles.metricIconText}>💼</Text>
+                <View style={styles.metricTopLeft}>
+                  <View style={[styles.metricIcon, { backgroundColor: COLORS.successDim }]}>
+                    <Text style={styles.metricIconText}>💼</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>This Month</Text>
                 </View>
                 <Text style={styles.metricChevron}>›</Text>
               </View>
-              <Text style={styles.metricLabel}>This Month</Text>
               <Text style={styles.metricValue}>₹{stats.totalMonth.toLocaleString('en-IN')}</Text>
               {stats.monthChangePct !== null && (
                 <View style={styles.changeRow}>
@@ -254,16 +256,18 @@ export default function DashboardScreen({ navigation }: any) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.metricCard, styles.metricHalf]}
+              style={[styles.metricCard, styles.metricToday]}
               onPress={() => navigation.navigate('Transactions')}
               activeOpacity={0.85}>
               <View style={styles.metricTop}>
-                <View style={[styles.metricIcon, { backgroundColor: '#DCEBFF' }]}>
-                  <Text style={styles.metricIconText}>📅</Text>
+                <View style={styles.metricTopLeft}>
+                  <View style={[styles.metricIcon, { backgroundColor: '#DCEBFF' }]}>
+                    <Text style={styles.metricIconText}>📅</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Today</Text>
                 </View>
                 <Text style={styles.metricChevron}>›</Text>
               </View>
-              <Text style={styles.metricLabel}>Today</Text>
               <Text style={styles.metricValue}>₹{stats.totalToday.toLocaleString('en-IN')}</Text>
               {stats.dayChangePct !== null ? (
                 <View style={styles.changeRow}>
@@ -369,7 +373,9 @@ export default function DashboardScreen({ navigation }: any) {
                         ]}>
                         <Text style={styles.catEmoji}>{meta.emoji}</Text>
                       </View>
-                      <Text style={styles.catLabel}>{cat}</Text>
+                      <Text style={styles.catLabel} numberOfLines={1}>
+                        {cat}
+                      </Text>
                       <Text style={[styles.catAmount, { color: meta.color }]}>
                         ₹{(amount ?? 0).toLocaleString('en-IN')}
                       </Text>
@@ -560,8 +566,9 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   // Metric cards
-  metricsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
-  metricHalf: { flex: 1 },
+  metricsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  metricMonth: { flex: 1.5 },
+  metricToday: { flex: 1 },
   metricCard: {
     backgroundColor: COLORS.card,
     borderWidth: 1,
@@ -574,6 +581,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+  },
+  metricTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
   },
   metricIcon: {
     width: 30,
@@ -669,28 +682,26 @@ const styles = StyleSheet.create({
   },
   categoriesRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     marginBottom: 20,
   },
   catCard: {
+    flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 10,
-    width: '47%',
-    flexGrow: 1,
+    borderRadius: 12,
+    padding: 8,
   },
   catIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 5,
   },
-  catEmoji: { fontSize: 14 },
-  catLabel: { color: COLORS.muted, fontSize: 11 },
-  catAmount: { fontSize: 15, fontWeight: '700', marginTop: 1 },
+  catEmoji: { fontSize: 11 },
+  catLabel: { color: COLORS.muted, fontSize: 10 },
+  catAmount: { fontSize: 12, fontWeight: '700', marginTop: 1 },
   catBarBg: {
     height: 4,
     backgroundColor: COLORS.cardBorder,

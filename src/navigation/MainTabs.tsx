@@ -10,11 +10,11 @@ import { COLORS } from '../constants/colors';
 
 type TabId = 'Dashboard' | 'Transactions' | 'Analytics' | 'Budget' | 'Settings';
 
+// Analytics and Budget are reached from Dashboard's quick actions/insight banner
+// instead of taking up bottom-tab slots.
 const TAB_CONFIG: { id: TabId; label: string; icon: string }[] = [
   { id: 'Dashboard', label: 'Home', icon: '🏠' },
   { id: 'Transactions', label: 'Expenses', icon: '📋' },
-  { id: 'Analytics', label: 'Analytics', icon: '📊' },
-  { id: 'Budget', label: 'Budget', icon: '💰' },
   { id: 'Settings', label: 'Settings', icon: '⚙️' },
 ];
 
