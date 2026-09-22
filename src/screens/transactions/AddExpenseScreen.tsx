@@ -14,6 +14,7 @@ import { COLORS } from '../../constants/colors';
 import { Category, Transaction } from '../../types';
 import { useApp } from '../../context/AppContext';
 import CategoryPicker from '../../components/CategoryPicker';
+import DatePickerModal from '../../components/DatePickerModal';
 import { istDateString, istNoonInstant } from '../../utils/dateIST';
 
 export default function AddExpenseScreen({ route, navigation }: any) {
@@ -35,6 +36,7 @@ export default function AddExpenseScreen({ route, navigation }: any) {
   const [date, setDate] = useState(
     existing ? istDateString(new Date(existing.date)) : istDateString(),
   );
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const handleSave = async () => {
     const amountNum = parseFloat(amount);
@@ -162,13 +164,19 @@ export default function AddExpenseScreen({ route, navigation }: any) {
         <CategoryPicker selected={category} onSelect={setCategory} />
 
         <Text style={[styles.label, { marginTop: 20 }]}>Date</Text>
-        <TextInput
-          style={styles.input}
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={COLORS.muted}
-        />
+        <TouchableOpacity
+          style={styles.dateInput}
+          onPress={() => setShowDatePicker(true)}
+          activeOpacity={0.8}>
+          <Text style={styles.dateInputText}>
+            {new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
+          </Text>
+          <Text style={styles.dateInputIcon}>📅</Text>
+        </TouchableOpacity>
 
         <Text style={styles.label}>Notes</Text>
         <TextInput
@@ -195,6 +203,16 @@ export default function AddExpenseScreen({ route, navigation }: any) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      <DatePickerModal
+        visible={showDatePicker}
+        value={new Date(`${date}T12:00:00`)}
+        onSelect={d => {
+          setDate(istDateString(d));
+          setShowDatePicker(false);
+        }}
+        onClose={() => setShowDatePicker(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -300,6 +318,24 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 80,
     paddingTop: 14,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  dateInputText: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  dateInputIcon: {
+    fontSize: 16,
   },
   saveBtn: {
     backgroundColor: COLORS.accent,

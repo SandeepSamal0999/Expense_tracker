@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, BackHandler, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
 import TransactionsScreen from '../screens/transactions/TransactionsScreen';
 import AddExpenseScreen from '../screens/transactions/AddExpenseScreen';
@@ -56,6 +56,30 @@ export default function MainTabs() {
   };
 
   const navigation = { navigate, goBack };
+
+  // Android hardware back button / edge-swipe gesture both fire this event.
+  // Without a listener, the OS default takes over and kills the app outright
+  // with no confirmation — so intercept it: close a sub-screen first, then
+  // return to Home, then finally confirm before actually exiting.
+  useEffect(() => {
+    const onBackPress = () => {
+      if (activeTab === 'Transactions' && txScreen === 'add') {
+        goBack();
+        return true;
+      }
+      if (activeTab !== 'Dashboard') {
+        setActiveTab('Dashboard');
+        return true;
+      }
+      Alert.alert('Exit App', 'Are you sure you want to exit?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [activeTab, txScreen]);
 
   const renderScreen = () => {
     switch (activeTab) {
