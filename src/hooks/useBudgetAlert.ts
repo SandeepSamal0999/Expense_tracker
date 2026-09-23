@@ -23,7 +23,10 @@ export function useBudgetAlert(
     const getSpentByCategory = () => {
       const map: Record<string, number> = {};
       expenses
-        .filter(e => istMonthString(new Date(e.date)) === currentMonth)
+        .filter(
+          e =>
+            (e.type ?? 'debit') === 'debit' && istMonthString(new Date(e.date)) === currentMonth,
+        )
         .forEach(e => {
           map[e.category] = (map[e.category] || 0) + e.amount;
         });

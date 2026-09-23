@@ -6,9 +6,22 @@ import AddExpenseScreen from '../screens/transactions/AddExpenseScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
 import BudgetScreen from '../screens/budget/BudgetScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
+import HouseScreen from '../screens/house/HouseScreen';
+import WorkersScreen from '../screens/workers/WorkersScreen';
+import MaterialsScreen from '../screens/materials/MaterialsScreen';
+import VendorsScreen from '../screens/vendors/VendorsScreen';
 import { COLORS } from '../constants/colors';
 
-type TabId = 'Dashboard' | 'Transactions' | 'Analytics' | 'Budget' | 'Settings';
+type TabId =
+  | 'Dashboard'
+  | 'Transactions'
+  | 'Analytics'
+  | 'Budget'
+  | 'Settings'
+  | 'House'
+  | 'Workers'
+  | 'Materials'
+  | 'Vendors';
 
 // Analytics and Budget are reached from Dashboard's quick actions/insight banner
 // instead of taking up bottom-tab slots.
@@ -25,6 +38,9 @@ export default function MainTabs() {
   const [addExpensePreset, setAddExpensePreset] = useState<'debit' | 'credit' | undefined>(
     undefined,
   );
+  const [addExpenseStageId, setAddExpenseStageId] = useState<string | undefined>(undefined);
+  const [addExpenseMaterialId, setAddExpenseMaterialId] = useState<string | undefined>(undefined);
+  const [addExpenseVendorId, setAddExpenseVendorId] = useState<string | undefined>(undefined);
 
   const navigate = (target: string, params?: any) => {
     if (target === 'Transactions') {
@@ -32,6 +48,9 @@ export default function MainTabs() {
       if (params?.screen === 'AddExpense') {
         setEditTransaction(params?.params?.transaction);
         setAddExpensePreset(params?.params?.presetType);
+        setAddExpenseStageId(params?.params?.presetStageId);
+        setAddExpenseMaterialId(params?.params?.presetMaterialId);
+        setAddExpenseVendorId(params?.params?.presetVendorId);
         setTxScreen('add');
       } else {
         setTxScreen('list');
@@ -39,6 +58,9 @@ export default function MainTabs() {
     } else if (target === 'AddExpense') {
       setEditTransaction(params?.transaction);
       setAddExpensePreset(params?.presetType);
+      setAddExpenseStageId(params?.presetStageId);
+      setAddExpenseMaterialId(params?.presetMaterialId);
+      setAddExpenseVendorId(params?.presetVendorId);
       setTxScreen('add');
     } else if (target === 'TransactionsList') {
       setTxScreen('list');
@@ -52,6 +74,9 @@ export default function MainTabs() {
       setTxScreen('list');
       setEditTransaction(undefined);
       setAddExpensePreset(undefined);
+      setAddExpenseStageId(undefined);
+      setAddExpenseMaterialId(undefined);
+      setAddExpenseVendorId(undefined);
     }
   };
 
@@ -65,6 +90,10 @@ export default function MainTabs() {
     const onBackPress = () => {
       if (activeTab === 'Transactions' && txScreen === 'add') {
         goBack();
+        return true;
+      }
+      if (activeTab === 'Workers' || activeTab === 'Materials' || activeTab === 'Vendors') {
+        setActiveTab('House');
         return true;
       }
       if (activeTab !== 'Dashboard') {
@@ -93,8 +122,16 @@ export default function MainTabs() {
               route={{
                 params: editTransaction
                   ? { transaction: editTransaction }
-                  : addExpensePreset
-                  ? { presetType: addExpensePreset }
+                  : addExpensePreset ||
+                    addExpenseStageId ||
+                    addExpenseMaterialId ||
+                    addExpenseVendorId
+                  ? {
+                      presetType: addExpensePreset,
+                      presetStageId: addExpenseStageId,
+                      presetMaterialId: addExpenseMaterialId,
+                      presetVendorId: addExpenseVendorId,
+                    }
                   : undefined,
               }}
             />
@@ -107,6 +144,14 @@ export default function MainTabs() {
         return <BudgetScreen />;
       case 'Settings':
         return <SettingsScreen />;
+      case 'House':
+        return <HouseScreen navigation={navigation} />;
+      case 'Workers':
+        return <WorkersScreen navigation={navigation} />;
+      case 'Materials':
+        return <MaterialsScreen navigation={navigation} />;
+      case 'Vendors':
+        return <VendorsScreen navigation={navigation} />;
       default:
         return <DashboardScreen navigation={navigation} />;
     }
@@ -129,6 +174,9 @@ export default function MainTabs() {
                   setTxScreen('list');
                   setEditTransaction(undefined);
                   setAddExpensePreset(undefined);
+                  setAddExpenseStageId(undefined);
+                  setAddExpenseMaterialId(undefined);
+                  setAddExpenseVendorId(undefined);
                 }
               }}
               activeOpacity={0.7}>

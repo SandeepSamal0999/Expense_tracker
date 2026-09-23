@@ -21,8 +21,20 @@ export default function AddExpenseScreen({ route, navigation }: any) {
   const existing: Transaction | undefined = route?.params?.transaction;
   const isEdit = !!existing;
   const presetType: 'debit' | 'credit' | undefined = route?.params?.presetType;
+  const presetStageId: string | undefined = route?.params?.presetStageId;
+  const presetMaterialId: string | undefined = route?.params?.presetMaterialId;
+  const presetVendorId: string | undefined = route?.params?.presetVendorId;
 
-  const { addExpense, editExpense, deleteExpense } = useApp();
+  const { state, addExpense, editExpense, deleteExpense } = useApp();
+  const [stageId, setStageId] = useState<string | undefined>(existing?.stageId ?? presetStageId);
+  const [materialId, setMaterialIdState] = useState<string | undefined>(
+    existing?.materialId ?? presetMaterialId,
+  );
+  const [vendorId, setVendorIdState] = useState<string | undefined>(
+    existing?.vendorId ?? presetVendorId,
+  );
+  const [quantity, setQuantityState] = useState(existing?.quantity ? String(existing.quantity) : '');
+  const [unitRate, setUnitRateState] = useState(existing?.unitRate ? String(existing.unitRate) : '');
 
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '');
   const [merchant, setMerchant] = useState(existing?.merchant || '');
@@ -37,6 +49,39 @@ export default function AddExpenseScreen({ route, navigation }: any) {
     existing ? istDateString(new Date(existing.date)) : istDateString(),
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const recalcAmount = (qty: string, rate: string) => {
+    const q = parseFloat(qty);
+    const r = parseFloat(rate);
+    if (q > 0 && r > 0) setAmount(String(q * r));
+  };
+
+  const setQuantity = (v: string) => {
+    setQuantityState(v);
+    recalcAmount(v, unitRate);
+  };
+
+  const setUnitRate = (v: string) => {
+    setUnitRateState(v);
+    recalcAmount(quantity, v);
+  };
+
+  const selectMaterial = (id: string | undefined) => {
+    if (id !== materialId) {
+      setQuantityState('');
+      setUnitRateState('');
+    }
+    setMaterialIdState(id);
+  };
+
+  const selectVendor = (id: string | undefined) => {
+    setVendorIdState(id);
+    // Convenience only — never overwrites a merchant name the user already typed.
+    if (id && !merchant.trim()) {
+      const vendor = state.vendors.find(v => v.id === id);
+      if (vendor) setMerchant(vendor.name);
+    }
+  };
 
   const handleSave = async () => {
     const amountNum = parseFloat(amount);
@@ -64,6 +109,11 @@ export default function AddExpenseScreen({ route, navigation }: any) {
       source: existing?.source || 'Manual',
       method: existing?.method || 'Manual',
       type: txType,
+      stageId,
+      materialId,
+      quantity: parseFloat(quantity) || undefined,
+      unitRate: parseFloat(unitRate) || undefined,
+      vendorId,
     };
 
     try {
@@ -162,6 +212,131 @@ export default function AddExpenseScreen({ route, navigation }: any) {
 
         <Text style={styles.label}>Category</Text>
         <CategoryPicker selected={category} onSelect={setCategory} />
+
+        {state.vendors.length > 0 && (
+          <>
+            <Text style={styles.label}>Vendor (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stageChipsRow}>
+              <TouchableOpacity
+                style={[styles.stageChip, !vendorId && styles.stageChipActive]}
+                onPress={() => selectVendor(undefined)}>
+                <Text style={[styles.stageChipText, !vendorId && styles.stageChipTextActive]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {state.vendors.map(v => (
+                <TouchableOpacity
+                  key={v.id}
+                  style={[styles.stageChip, vendorId === v.id && styles.stageChipActive]}
+                  onPress={() => selectVendor(v.id)}>
+                  <Text
+                    style={[
+                      styles.stageChipText,
+                      vendorId === v.id && styles.stageChipTextActive,
+                    ]}>
+                    {v.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {state.materials.length > 0 && (
+          <>
+            <Text style={styles.label}>Material (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stageChipsRow}>
+              <TouchableOpacity
+                style={[styles.stageChip, !materialId && styles.stageChipActive]}
+                onPress={() => selectMaterial(undefined)}>
+                <Text style={[styles.stageChipText, !materialId && styles.stageChipTextActive]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {state.materials.map(m => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.stageChip, materialId === m.id && styles.stageChipActive]}
+                  onPress={() => selectMaterial(m.id)}>
+                  <Text
+                    style={[
+                      styles.stageChipText,
+                      materialId === m.id && styles.stageChipTextActive,
+                    ]}>
+                    {m.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {materialId && (
+              <View style={styles.qtyRateRow}>
+                <View style={styles.qtyRateCol}>
+                  <Text style={styles.label}>
+                    Quantity ({state.materials.find(m => m.id === materialId)?.unit})
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={quantity}
+                    onChangeText={setQuantity}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.qtyRateCol}>
+                  <Text style={styles.label}>Rate (₹)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={unitRate}
+                    onChangeText={setUnitRate}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.muted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
+        {state.stages.length > 0 && (
+          <>
+            <Text style={styles.label}>Construction Stage (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stageChipsRow}>
+              <TouchableOpacity
+                style={[styles.stageChip, !stageId && styles.stageChipActive]}
+                onPress={() => setStageId(undefined)}>
+                <Text style={[styles.stageChipText, !stageId && styles.stageChipTextActive]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {state.stages.map(s => (
+                <TouchableOpacity
+                  key={s.id}
+                  style={[styles.stageChip, stageId === s.id && styles.stageChipActive]}
+                  onPress={() => setStageId(s.id)}>
+                  <Text
+                    style={[
+                      styles.stageChipText,
+                      stageId === s.id && styles.stageChipTextActive,
+                    ]}>
+                    {s.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
 
         <Text style={[styles.label, { marginTop: 20 }]}>Date</Text>
         <TouchableOpacity
@@ -336,6 +511,38 @@ const styles = StyleSheet.create({
   },
   dateInputIcon: {
     fontSize: 16,
+  },
+  stageChipsRow: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  qtyRateRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  qtyRateCol: {
+    flex: 1,
+  },
+  stageChip: {
+    backgroundColor: COLORS.inputBg,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  stageChipActive: {
+    backgroundColor: COLORS.accentDim,
+    borderColor: COLORS.accent,
+  },
+  stageChipText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  stageChipTextActive: {
+    color: COLORS.accent,
   },
   saveBtn: {
     backgroundColor: COLORS.accent,

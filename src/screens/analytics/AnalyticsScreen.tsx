@@ -43,8 +43,11 @@ export default function AnalyticsScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // ── Filtered expenses based on selected period ──────────────────────────────
+  // Debits only — deposits (type: 'credit') are tracked separately (Dashboard's
+  // Total Deposits card/modal) and shouldn't inflate spending charts/totals here.
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
+      if ((e.type ?? 'debit') !== 'debit') return false;
       const d = new Date(e.date);
       if (period === 'today') return istDateString(d) === istDateString(now);
       if (period === 'week') {
@@ -73,7 +76,9 @@ export default function AnalyticsScreen() {
         const monthStr = istMonthStringMonthsAgo(5 - i, now);
         const m = Number(monthStr.split('-')[1]) - 1;
         const value = expenses
-          .filter(e => istMonthString(new Date(e.date)) === monthStr)
+          .filter(
+            e => (e.type ?? 'debit') === 'debit' && istMonthString(new Date(e.date)) === monthStr,
+          )
           .reduce((s, e) => s + e.amount, 0);
         return { label: MONTH_NAMES[m], value };
       });

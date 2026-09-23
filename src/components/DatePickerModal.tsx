@@ -13,6 +13,8 @@ interface Props {
   value: Date;
   onSelect: (date: Date) => void;
   onClose: () => void;
+  /** Allow picking dates after today (e.g. an expected completion date). Default false. */
+  allowFuture?: boolean;
 }
 
 function sameDay(a: Date, b: Date): boolean {
@@ -23,7 +25,13 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-export default function DatePickerModal({ visible, value, onSelect, onClose }: Props) {
+export default function DatePickerModal({
+  visible,
+  value,
+  onSelect,
+  onClose,
+  allowFuture = false,
+}: Props) {
   const today = new Date();
 
   const [viewYear, setViewYear] = useState(value.getFullYear());
@@ -44,8 +52,9 @@ export default function DatePickerModal({ visible, value, onSelect, onClose }: P
     else setViewMonth(m => m - 1);
   };
   const isNextDisabled =
-    viewYear > today.getFullYear() ||
-    (viewYear === today.getFullYear() && viewMonth >= today.getMonth());
+    !allowFuture &&
+    (viewYear > today.getFullYear() ||
+      (viewYear === today.getFullYear() && viewMonth >= today.getMonth()));
   const goNext = () => {
     if (isNextDisabled) return;
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
@@ -53,7 +62,7 @@ export default function DatePickerModal({ visible, value, onSelect, onClose }: P
   };
 
   const handleDayPress = (day: Date) => {
-    if (day > today) return; // future blocked
+    if (!allowFuture && day > today) return; // future blocked
     onSelect(day);
   };
 
@@ -95,7 +104,7 @@ export default function DatePickerModal({ visible, value, onSelect, onClose }: P
             {days.map((day, i) => {
               if (!day) return <View key={`empty-${i}`} style={styles.cell} />;
 
-              const isFuture = day > today;
+              const isFuture = !allowFuture && day > today;
               const isSelected = sameDay(day, value);
               const isToday = sameDay(day, today);
 

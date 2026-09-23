@@ -30,8 +30,12 @@ export default function BudgetScreen() {
     year: 'numeric',
   });
 
+  // Debits only — deposits (type: 'credit') aren't spending and shouldn't count
+  // against a budget.
   const monthExpenses = useMemo(() => {
-    return expenses.filter(e => istMonthString(new Date(e.date)) === currentMonth);
+    return expenses.filter(
+      e => (e.type ?? 'debit') === 'debit' && istMonthString(new Date(e.date)) === currentMonth,
+    );
   }, [expenses, currentMonth]);
 
   const spentByCategory = useMemo(() => {

@@ -8,11 +8,29 @@ import React, {
   ReactNode,
 } from 'react';
 import { AppState as RNAppState, AppStateStatus } from 'react-native';
-import { Transaction, Budget, User, CategoryMeta } from '../types';
+import {
+  Transaction,
+  Budget,
+  User,
+  CategoryMeta,
+  House,
+  ConstructionStage,
+  Worker,
+  WorkerAttendance,
+  WorkerPayment,
+  WorkerFixedJob,
+  Material,
+  Vendor,
+  VendorPayment,
+} from '../types';
 import { AppSettings } from '../services/storageService';
 import * as api from '../services/api';
 import * as categoryService from '../services/categoryService';
 import * as storage from '../services/storageService';
+import * as houseService from '../services/houseService';
+import * as workerService from '../services/workerService';
+import * as materialService from '../services/materialService';
+import * as vendorService from '../services/vendorService';
 import { syncWidget } from '../services/widgetService';
 
 interface AppState {
@@ -21,6 +39,15 @@ interface AppState {
   budgets: Budget[];
   categories: CategoryMeta[];
   settings: AppSettings;
+  house: House | null;
+  stages: ConstructionStage[];
+  workers: Worker[];
+  workerAttendance: WorkerAttendance[];
+  workerPayments: WorkerPayment[];
+  workerFixedJobs: WorkerFixedJob[];
+  materials: Material[];
+  vendors: Vendor[];
+  vendorPayments: VendorPayment[];
   isLoading: boolean;
   isAuthChecked: boolean;
 }
@@ -33,6 +60,15 @@ type Action =
   | { type: 'SET_BUDGETS'; payload: Budget[] }
   | { type: 'SET_CATEGORIES'; payload: CategoryMeta[] }
   | { type: 'SET_SETTINGS'; payload: AppSettings }
+  | { type: 'SET_HOUSE'; payload: House | null }
+  | { type: 'SET_STAGES'; payload: ConstructionStage[] }
+  | { type: 'SET_WORKERS'; payload: Worker[] }
+  | { type: 'SET_WORKER_ATTENDANCE'; payload: WorkerAttendance[] }
+  | { type: 'SET_WORKER_PAYMENTS'; payload: WorkerPayment[] }
+  | { type: 'SET_WORKER_FIXED_JOBS'; payload: WorkerFixedJob[] }
+  | { type: 'SET_MATERIALS'; payload: Material[] }
+  | { type: 'SET_VENDORS'; payload: Vendor[] }
+  | { type: 'SET_VENDOR_PAYMENTS'; payload: VendorPayment[] }
   | { type: 'LOGOUT' };
 
 const initialState: AppState = {
@@ -41,6 +77,15 @@ const initialState: AppState = {
   budgets: [],
   categories: categoryService.DEFAULT_CATEGORIES,
   settings: { smsEnabled: false, notifEnabled: false },
+  house: null,
+  stages: [],
+  workers: [],
+  workerAttendance: [],
+  workerPayments: [],
+  workerFixedJobs: [],
+  materials: [],
+  vendors: [],
+  vendorPayments: [],
   isLoading: true,
   isAuthChecked: false,
 };
@@ -54,6 +99,15 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_BUDGETS':      return { ...state, budgets: action.payload };
     case 'SET_CATEGORIES':   return { ...state, categories: action.payload };
     case 'SET_SETTINGS':     return { ...state, settings: action.payload };
+    case 'SET_HOUSE':        return { ...state, house: action.payload };
+    case 'SET_STAGES':       return { ...state, stages: action.payload };
+    case 'SET_WORKERS':      return { ...state, workers: action.payload };
+    case 'SET_WORKER_ATTENDANCE': return { ...state, workerAttendance: action.payload };
+    case 'SET_WORKER_PAYMENTS':   return { ...state, workerPayments: action.payload };
+    case 'SET_WORKER_FIXED_JOBS': return { ...state, workerFixedJobs: action.payload };
+    case 'SET_MATERIALS':         return { ...state, materials: action.payload };
+    case 'SET_VENDORS':           return { ...state, vendors: action.payload };
+    case 'SET_VENDOR_PAYMENTS':   return { ...state, vendorPayments: action.payload };
     case 'LOGOUT':           return { ...initialState, isAuthChecked: true, isLoading: false };
     default:                 return state;
   }
@@ -75,6 +129,28 @@ interface AppContextType {
   updateCategory: (originalName: string, name: string, emoji: string) => Promise<void>;
   deleteCategory: (name: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
+  setupHouse: (house: House) => Promise<void>;
+  updateHouse: (house: House) => Promise<void>;
+  addStage: (name: string) => Promise<void>;
+  updateStage: (id: string, patch: Partial<ConstructionStage>) => Promise<void>;
+  deleteStage: (id: string) => Promise<void>;
+  reorderStages: (stages: ConstructionStage[]) => Promise<void>;
+  addWorker: (worker: Omit<Worker, 'id'>) => Promise<void>;
+  updateWorker: (id: string, patch: Partial<Worker>) => Promise<void>;
+  deleteWorker: (id: string) => Promise<void>;
+  recordAttendanceBatch: (entries: WorkerAttendance[]) => Promise<void>;
+  addWorkerPayment: (payment: Omit<WorkerPayment, 'id'>) => Promise<void>;
+  deleteWorkerPayment: (id: string) => Promise<void>;
+  addWorkerFixedJob: (job: Omit<WorkerFixedJob, 'id'>) => Promise<void>;
+  deleteWorkerFixedJob: (id: string) => Promise<void>;
+  addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
+  updateMaterial: (id: string, patch: Partial<Material>) => Promise<void>;
+  deleteMaterial: (id: string) => Promise<void>;
+  addVendor: (vendor: Omit<Vendor, 'id'>) => Promise<void>;
+  updateVendor: (id: string, patch: Partial<Vendor>) => Promise<void>;
+  deleteVendor: (id: string) => Promise<void>;
+  addVendorPayment: (payment: Omit<VendorPayment, 'id'>) => Promise<void>;
+  deleteVendorPayment: (id: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -85,13 +161,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [user, categories, settings] = await Promise.all([
+        const [
+          user,
+          categories,
+          settings,
+          house,
+          stages,
+          workers,
+          workerAttendance,
+          workerPayments,
+          workerFixedJobs,
+          materials,
+          vendors,
+          vendorPayments,
+        ] = await Promise.all([
           api.getCurrentUser(),
           categoryService.getCategories(),
           storage.getSettings(),
+          houseService.getHouse(),
+          houseService.getStages(),
+          workerService.getWorkers(),
+          workerService.getAttendance(),
+          workerService.getPayments(),
+          workerService.getFixedJobs(),
+          materialService.getMaterials(),
+          vendorService.getVendors(),
+          vendorService.getPayments(),
         ]);
         dispatch({ type: 'SET_SETTINGS', payload: settings });
         dispatch({ type: 'SET_CATEGORIES', payload: categories });
+        dispatch({ type: 'SET_HOUSE', payload: house });
+        dispatch({ type: 'SET_STAGES', payload: stages });
+        dispatch({ type: 'SET_WORKERS', payload: workers });
+        dispatch({ type: 'SET_WORKER_ATTENDANCE', payload: workerAttendance });
+        dispatch({ type: 'SET_WORKER_PAYMENTS', payload: workerPayments });
+        dispatch({ type: 'SET_WORKER_FIXED_JOBS', payload: workerFixedJobs });
+        dispatch({ type: 'SET_MATERIALS', payload: materials });
+        dispatch({ type: 'SET_VENDORS', payload: vendors });
+        dispatch({ type: 'SET_VENDOR_PAYMENTS', payload: vendorPayments });
         dispatch({ type: 'SET_USER', payload: user });
         if (user) {
           const [expenses, budgets] = await Promise.all([
@@ -195,6 +302,111 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateSettings: async (settings) => {
       await storage.saveSettings(settings);
       dispatch({ type: 'SET_SETTINGS', payload: settings });
+    },
+    setupHouse: async (house) => {
+      await houseService.saveHouse(house);
+      dispatch({ type: 'SET_HOUSE', payload: house });
+      if (state.stages.length === 0) {
+        const stages = houseService.createDefaultStages();
+        await houseService.saveStages(stages);
+        dispatch({ type: 'SET_STAGES', payload: stages });
+      }
+    },
+    updateHouse: async (house) => {
+      await houseService.saveHouse(house);
+      dispatch({ type: 'SET_HOUSE', payload: house });
+    },
+    addStage: async (name) => {
+      const stages = await houseService.addStage(name);
+      dispatch({ type: 'SET_STAGES', payload: stages });
+    },
+    updateStage: async (id, patch) => {
+      const stages = await houseService.updateStage(id, patch);
+      dispatch({ type: 'SET_STAGES', payload: stages });
+    },
+    deleteStage: async (id) => {
+      const stages = await houseService.deleteStage(id);
+      dispatch({ type: 'SET_STAGES', payload: stages });
+    },
+    reorderStages: async (stages) => {
+      await houseService.saveStages(stages);
+      dispatch({ type: 'SET_STAGES', payload: stages });
+    },
+    addWorker: async (worker) => {
+      const workers = await workerService.addWorker(worker);
+      dispatch({ type: 'SET_WORKERS', payload: workers });
+    },
+    updateWorker: async (id, patch) => {
+      const workers = await workerService.updateWorker(id, patch);
+      dispatch({ type: 'SET_WORKERS', payload: workers });
+    },
+    deleteWorker: async (id) => {
+      const workers = await workerService.deleteWorker(id);
+      const attendance = (await workerService.getAttendance()).filter(a => a.workerId !== id);
+      await workerService.saveAttendance(attendance);
+      const payments = (await workerService.getPayments()).filter(p => p.workerId !== id);
+      await workerService.savePayments(payments);
+      const fixedJobs = (await workerService.getFixedJobs()).filter(j => j.workerId !== id);
+      await workerService.saveFixedJobs(fixedJobs);
+      dispatch({ type: 'SET_WORKERS', payload: workers });
+      dispatch({ type: 'SET_WORKER_ATTENDANCE', payload: attendance });
+      dispatch({ type: 'SET_WORKER_PAYMENTS', payload: payments });
+      dispatch({ type: 'SET_WORKER_FIXED_JOBS', payload: fixedJobs });
+    },
+    recordAttendanceBatch: async (entries) => {
+      const records = await workerService.recordAttendanceBatch(entries);
+      dispatch({ type: 'SET_WORKER_ATTENDANCE', payload: records });
+    },
+    addWorkerPayment: async (payment) => {
+      const payments = await workerService.addPayment(payment);
+      dispatch({ type: 'SET_WORKER_PAYMENTS', payload: payments });
+    },
+    deleteWorkerPayment: async (id) => {
+      const payments = await workerService.deletePayment(id);
+      dispatch({ type: 'SET_WORKER_PAYMENTS', payload: payments });
+    },
+    addWorkerFixedJob: async (job) => {
+      const jobs = await workerService.addFixedJob(job);
+      dispatch({ type: 'SET_WORKER_FIXED_JOBS', payload: jobs });
+    },
+    deleteWorkerFixedJob: async (id) => {
+      const jobs = await workerService.deleteFixedJob(id);
+      dispatch({ type: 'SET_WORKER_FIXED_JOBS', payload: jobs });
+    },
+    addMaterial: async (material) => {
+      const materials = await materialService.addMaterial(material);
+      dispatch({ type: 'SET_MATERIALS', payload: materials });
+    },
+    updateMaterial: async (id, patch) => {
+      const materials = await materialService.updateMaterial(id, patch);
+      dispatch({ type: 'SET_MATERIALS', payload: materials });
+    },
+    deleteMaterial: async (id) => {
+      const materials = await materialService.deleteMaterial(id);
+      dispatch({ type: 'SET_MATERIALS', payload: materials });
+    },
+    addVendor: async (vendor) => {
+      const vendors = await vendorService.addVendor(vendor);
+      dispatch({ type: 'SET_VENDORS', payload: vendors });
+    },
+    updateVendor: async (id, patch) => {
+      const vendors = await vendorService.updateVendor(id, patch);
+      dispatch({ type: 'SET_VENDORS', payload: vendors });
+    },
+    deleteVendor: async (id) => {
+      const vendors = await vendorService.deleteVendor(id);
+      const payments = (await vendorService.getPayments()).filter(p => p.vendorId !== id);
+      await vendorService.savePayments(payments);
+      dispatch({ type: 'SET_VENDORS', payload: vendors });
+      dispatch({ type: 'SET_VENDOR_PAYMENTS', payload: payments });
+    },
+    addVendorPayment: async (payment) => {
+      const payments = await vendorService.addPayment(payment);
+      dispatch({ type: 'SET_VENDOR_PAYMENTS', payload: payments });
+    },
+    deleteVendorPayment: async (id) => {
+      const payments = await vendorService.deletePayment(id);
+      dispatch({ type: 'SET_VENDOR_PAYMENTS', payload: payments });
     },
   };
 

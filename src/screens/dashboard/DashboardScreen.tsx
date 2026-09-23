@@ -9,6 +9,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { COLORS } from '../../constants/colors';
+import { Transaction } from '../../types';
 import { getCategoryMeta } from '../../services/categoryService';
 import TransactionRow from '../../components/TransactionRow';
 import EmptyState from '../../components/EmptyState';
@@ -22,7 +23,7 @@ import {
 
 const QUICK_ACTIONS = [
   { key: 'add', icon: '➕', bg: '#FDE1E6', fg: '#E4374F', label: 'Add Expense' },
-  { key: 'scan', icon: '🧾', bg: '#DCEBFF', fg: '#2563EB', label: 'Scan Bill' },
+  { key: 'house', icon: '🏗️', bg: '#DCEBFF', fg: '#2563EB', label: 'House Build' },
   { key: 'budget', icon: '🎯', bg: '#DCF6E8', fg: COLORS.success, label: 'Budgets' },
   { key: 'reports', icon: '📊', bg: '#EDE1FB', fg: '#7C3AED', label: 'Reports' },
 ] as const;
@@ -136,7 +137,7 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   const handleDelete = useCallback(
-    (tx: Parameters<typeof deleteExpense>[0] extends string ? never : any) => {
+    (tx: Transaction) => {
       deleteExpense(tx.id);
       show({
         text: `${tx.merchant} deleted`,
@@ -151,8 +152,8 @@ export default function DashboardScreen({ navigation }: any) {
     (key: (typeof QUICK_ACTIONS)[number]['key']) => {
       if (key === 'add') {
         navigation.navigate('Transactions', { screen: 'AddExpense' });
-      } else if (key === 'scan') {
-        show({ text: 'Scan Bill', subtext: 'Coming soon!' });
+      } else if (key === 'house') {
+        navigation.navigate('House');
       } else if (key === 'budget') {
         navigation.navigate('Budget');
       } else if (key === 'reports') {
